@@ -35,3 +35,13 @@ def test_seed_rejects_real_organization_and_unbounded_batch():
         validate_options('synthetic-demo', 2_000_001, 10000)
     with pytest.raises(ValueError):
         validate_options('synthetic-demo', 2_000_000, 20001)
+
+
+def test_bulk_statement_is_accepted_by_the_actual_cloud_sql_driver():
+    from pg8000.dbapi import convert_paramstyle
+    from sqlalchemy.dialects.postgresql.pg8000 import PGDialect_pg8000
+    from backend.seed import INSERT_BATCH
+    compiled = INSERT_BATCH.compile(dialect=PGDialect_pg8000())
+    query, arguments = convert_paramstyle('format', str(compiled), ('synthetic-test', 'transactions-v1', 0, 9))
+    assert 'generate_series' in query
+    assert len(arguments) == 4

@@ -19,15 +19,15 @@ INSERT_BATCH = text('''
 INSERT INTO records (org, kind, id, version, data, updated_at)
 SELECT :org, 'transaction', 'syn-v1-' || lpad(n::text, 10, '0'), 1,
  json_build_object(
-   'supplier_id', 'synthetic-supplier-' || lpad((n % 20000)::text, 5, '0'),
-   'supplier_name', 'Synthetic Supplier ' || lpad((n % 20000)::text, 5, '0'),
-   'amount', ((100 + (n * 7919) % 4999900) / 100.0)::numeric(12,2)::text,
-   'currency', (ARRAY['USD','INR','EUR','GBP'])[(n % 4 + 1)::int],
-   'occurred_at', to_char(TIMESTAMPTZ '2025-01-01 00:00:00+00' + (n % 31536000) * INTERVAL '1 second',
+   'supplier_id', 'synthetic-supplier-' || lpad((mod(n, 20000))::text, 5, '0'),
+   'supplier_name', 'Synthetic Supplier ' || lpad((mod(n, 20000))::text, 5, '0'),
+   'amount', ((100 + mod(n * 7919, 4999900)) / 100.0)::numeric(12,2)::text,
+   'currency', (ARRAY['USD','INR','EUR','GBP'])[(mod(n, 4) + 1)::int],
+   'occurred_at', to_char(TIMESTAMPTZ '2025-01-01 00:00:00+00' + (mod(n, 31536000)) * INTERVAL '1 second',
                            'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
    'reference', 'SYNTHETIC / TEST ONLY / ' || n::text,
-   'account_fingerprint', 'synthetic-' || md5('account-' || (n % 20000)::text),
-   'previous_account_fingerprint', CASE WHEN n % 5 = 0 THEN 'synthetic-' || md5('old-account-' || (n % 20000)::text) ELSE NULL END,
+   'account_fingerprint', 'synthetic-' || md5('account-' || (mod(n, 20000))::text),
+   'previous_account_fingerprint', CASE WHEN mod(n, 5) = 0 THEN 'synthetic-' || md5('old-account-' || (mod(n, 20000))::text) ELSE NULL END,
    'document_ids', '[]'::json,
    'synthetic', true, 'dataset_id', CAST(:dataset AS text), 'seed_index', n),
  TIMESTAMPTZ '2025-01-01 00:00:00+00' + n * INTERVAL '1 second'

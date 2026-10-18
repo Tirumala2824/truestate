@@ -7,6 +7,7 @@
 | Google Cloud SDK clients (Apache-2.0) | Document AI, Search, BigQuery, Pub/Sub, Storage, Vertex AI | https://github.com/googleapis/google-cloud-python |
 | Cloud SQL Python Connector (Apache-2.0) | IAM database connections | https://github.com/GoogleCloudPlatform/cloud-sql-python-connector |
 | FastAPI (MIT) / SQLAlchemy (MIT) | Typed APIs and transactional persistence | https://github.com/fastapi/fastapi / https://github.com/sqlalchemy/sqlalchemy |
+| Alembic (MIT) | Versioned schema migrations, legacy adoption and SQL generation | https://github.com/sqlalchemy/alembic |
 | React (MIT), Vite (MIT), Lucide (ISC) | Responsive operations console and icons | https://github.com/facebook/react / https://github.com/vitejs/vite / https://github.com/lucide-icons/lucide |
 | scikit-learn (BSD-3-Clause) | Optional real-data baseline training | https://github.com/scikit-learn/scikit-learn |
 
