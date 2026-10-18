@@ -30,7 +30,7 @@ class GoogleCloud:
     def genai(self):
         from google import genai
         from google.genai import types
-        return genai.Client(vertexai=True, project=self.s.project, location=self.s.region,
+        return genai.Client(vertexai=True, project=self.s.project, location=self.s.gemini_location,
                             http_options=types.HttpOptions(api_version='v1', timeout=90000))
 
     def put_object(self, key, data: bytes, mime):

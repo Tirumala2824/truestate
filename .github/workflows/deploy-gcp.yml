@@ -32,6 +32,7 @@ jobs:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION || 'us-central1' }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      GEMINI_LOCATION: ${{ vars.GEMINI_LOCATION || 'us' }}
       REVIEWER_EMAILS: ${{ vars.REVIEWER_EMAILS }}
       OPERATOR_EMAILS: ${{ vars.OPERATOR_EMAILS }}
       SOURCE_CONNECTOR_EMAILS: ${{ vars.SOURCE_CONNECTOR_EMAILS }}

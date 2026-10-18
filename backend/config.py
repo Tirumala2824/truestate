@@ -10,6 +10,7 @@ class Settings(BaseModel):
     organization: str = 'default'
     mode: str = 'app'
     gemini_model: str = ''
+    gemini_location: str = 'us'
     sql_instance: str = ''
     sql_database: str = 'truestate'
     sql_user: str = ''
@@ -44,7 +45,7 @@ def settings() -> Settings:
     names = {
         'project': 'GOOGLE_CLOUD_PROJECT', 'region': 'GOOGLE_CLOUD_LOCATION',
         'organization': 'ORGANIZATION_ID', 'mode': 'SERVICE_MODE',
-        'gemini_model': 'GEMINI_MODEL', 'sql_instance': 'INSTANCE_CONNECTION_NAME',
+        'gemini_model': 'GEMINI_MODEL', 'gemini_location': 'GEMINI_LOCATION', 'sql_instance': 'INSTANCE_CONNECTION_NAME',
         'sql_database': 'DB_NAME', 'sql_user': 'DB_IAM_USER', 'bucket': 'EVIDENCE_BUCKET',
         'bq_dataset': 'BIGQUERY_DATASET', 'bq_location': 'BIGQUERY_LOCATION',
         'document_processor': 'DOCUMENT_AI_PROCESSOR', 'document_location': 'DOCUMENT_AI_LOCATION',

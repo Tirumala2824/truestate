@@ -24,7 +24,7 @@ def inputs():
     org = env.get('ORGANIZATION_ID') or seed_org
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', org):
         raise ValueError('ORGANIZATION_ID must contain 1–100 letters, digits, underscores or hyphens.')
-    return {'gemini_model': env['GEMINI_MODEL'], 'reviewer_emails': reviewers,
+    return {'gemini_model': env['GEMINI_MODEL'], 'gemini_location': env.get('GEMINI_LOCATION') or 'us', 'reviewer_emails': reviewers,
             'operator_emails': operators, 'source_connector_emails': connectors,
             'prediction_endpoint': env.get('VERTEX_PREDICTION_ENDPOINT', ''),
             'organization_id': org, 'seed_organization_id': seed_org}

@@ -1,5 +1,6 @@
 variable "foundation" { type = map(string) }
 variable "gemini_model" { type = string }
+variable "gemini_location" { type = string }
 variable "organization_id" { type = string }
 variable "reviewer_emails" { type = list(string) }
 variable "source_connector_emails" { type = list(string) }
@@ -14,6 +15,7 @@ output "values" {
     GOOGLE_GENAI_USE_VERTEXAI   = "true"
     GOOGLE_GENAI_USE_ENTERPRISE = "true"
     GEMINI_MODEL                = var.gemini_model
+    GEMINI_LOCATION             = var.gemini_location
     ORGANIZATION_ID             = var.organization_id
     INSTANCE_CONNECTION_NAME    = var.foundation.sql_instance
     DB_IAM_USER                 = var.foundation.sql_user

@@ -28,7 +28,8 @@ Go to **Settings → Secrets and variables → Actions → Variables**. Use repo
 | Variable | Required? | Value |
 |---|---|---|
 | `GCP_PROJECT_ID` | Yes | Your billing-enabled project ID, not project number |
-| `GEMINI_MODEL` | Yes | A Gemini model ID enabled in your selected Vertex AI region |
+| `GEMINI_MODEL` | Yes | A Gemini model ID enabled in `GEMINI_LOCATION` |
+| `GEMINI_LOCATION` | Optional | Default `us`; independent of the Cloud Run/SQL region. Gemini 3.8 Flash supports `us`, `eu`, and `global`, rather than `us-central1`. |
 | `REVIEWER_EMAILS` | Yes | Comma-separated Google identities allowed to review decisions and policies |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | With federation | Full `projects/.../locations/global/workloadIdentityPools/.../providers/...` name |
 | `GCP_SERVICE_ACCOUNT` | With federation | Deployment service-account email |

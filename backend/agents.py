@@ -68,7 +68,7 @@ class AgentTeam:
         os.environ['GOOGLE_GENAI_USE_VERTEXAI'] = 'true'
         os.environ['GOOGLE_GENAI_USE_ENTERPRISE'] = 'true'
         os.environ['GOOGLE_CLOUD_PROJECT'] = self.s.project
-        os.environ['GOOGLE_CLOUD_LOCATION'] = self.s.region
+        os.environ['GOOGLE_CLOUD_LOCATION'] = self.s.gemini_location
         sessions = InMemorySessionService()
         await sessions.create_session(app_name='truestate', user_id=self.s.organization, session_id=run_id)
         runner = Runner(app_name='truestate', agent=build_agents(self.s.gemini_model), session_service=sessions)

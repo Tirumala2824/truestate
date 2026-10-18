@@ -26,6 +26,10 @@ variable "image" {
 variable "gemini_model" {
   type = string
 }
+variable "gemini_location" {
+  type    = string
+  default = "us"
+}
 
 variable "reviewer_emails" {
   type = list(string)
@@ -63,6 +67,7 @@ module "environment" {
   source                  = "../modules/environment"
   foundation              = var.foundation
   gemini_model            = var.gemini_model
+  gemini_location         = var.gemini_location
   reviewer_emails         = var.reviewer_emails
   source_connector_emails = var.source_connector_emails
   prediction_endpoint     = var.prediction_endpoint
