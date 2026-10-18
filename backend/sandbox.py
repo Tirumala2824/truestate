@@ -79,6 +79,4 @@ def worker_organizations(base, limit=201):
     with base.session() as session:
         orgs = session.scalars(select(Job.org).where(Job.status.in_(['queued', 'running']))
                                .distinct().limit(limit)).all()
-        indexing = session.scalars(select(Record.org).where(Record.kind == 'knowledge',
-            Record.data['indexing']['status'].as_string() == 'submitted').distinct().limit(limit)).all()
-    return [org for org in set(orgs + indexing) if org == base.org or SANDBOX.fullmatch(org)]
+    return [org for org in orgs if org == base.org or SANDBOX.fullmatch(org)]
