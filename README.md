@@ -2,7 +2,7 @@
 
 A GCP-backed operations console for supplier-payment and vendor-change reviews across finance, security, and legal teams. Four Google ADK agents process the work automatically; people work from a queue of evidence gaps and exceptions. There is no general chat interface.
 
-**Deployment status:** source implementation and local tests are provided. No Google Cloud project or credentials were available in the development session, so this version has not been deployed or end-to-end verified against live GCP services. Real model responses, OCR, search indexing, Cloud SQL IAM, IAP and external execution still need a project acceptance run. The old hosted demo is not this implementation.
+**Deployment status:** the GitHub deployment pipeline and Alembic/seed configuration are implemented. The GCP deployment job has not run in this development session; GitHub project variables and cloud authorization must be configured first. This version has not yet been end-to-end verified against live GCP services. Real model responses, OCR, search indexing, Cloud SQL IAM, IAP and external execution still need a project acceptance run. The old hosted demo is not this implementation.
 
 ## What works in the implementation
 

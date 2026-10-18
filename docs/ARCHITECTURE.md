@@ -28,4 +28,9 @@ Original files are generation-addressed in private Cloud Storage. Reports become
 
 A decision binds transaction contents, document versions and hashes, declared ancestry, connector attestations, the automation policy, and the entire registered policy corpus. Inserting, retiring, or replacing a policy therefore changes the decision's input snapshot even when that policy was not returned by search. Policy registration is distinguished from search readiness; the scheduler checks submitted policies and triggers reassessment when they become retrievable.
 
-The console exposes work queues, evidence provenance, current decisions, configuration, measured analytics, service checks, and receipts. A case can export its actual JSON report. The interface has responsive layouts and keyboard-operable dialogs. It contains no seeded transaction, document, supplier, risk score, model accuracy, or revenue data.
+The console exposes work queues, evidence provenance, current decisions, configuration, measured analytics, service checks, and receipts. A case can export its actual JSON report. The interface has responsive layouts and keyboard-operable dialogs. The frontend bundles no business-data fixtures. The release seed job now creates 2,000,000 labelled synthetic transactions in PostgreSQL under a reserved synthetic organization. Those rows are shown as unassessed until a real assessment runs. No document evidence, model findings, accuracy or revenue metrics are fabricated. External execution is blocked for synthetic workspaces.
+
+
+## Release and migration order
+
+GitHub Actions validates source and PostgreSQL behavior, provisions the foundation, builds an immutable image, then applies a separate jobs root. A Cloud SQL backup precedes the Alembic upgrade. Resumable PostgreSQL seeding and runtime-identity service checks must pass before the application/worker root is applied. Startup readiness verifies the packaged Alembic head and the required seed manifest. See [the release configuration](GITHUB_DEPLOYMENT.md) and [migration operations](MIGRATIONS.md).
