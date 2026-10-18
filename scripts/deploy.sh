@@ -10,6 +10,19 @@ export PROJECT_ID REGION RELEASE_SHA
 command -v gcloud >/dev/null
 command -v terraform >/dev/null
 gcloud auth print-access-token >/dev/null
+describe_build() {
+  gcloud builds describe "$1" --project "$PROJECT_ID" --region "$REGION" \
+    --format='json(id,status,statusDetail,failureInfo,warnings,timing)'
+}
+if [[ -n "${DIAGNOSTIC_BUILD_ID:-}" ]]; then
+  if [[ ! "$DIAGNOSTIC_BUILD_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
+    printf '%s\n' 'Diagnostic build ID must be a Cloud Build UUID.' >&2
+    exit 1
+  fi
+  describe_build "$DIAGNOSTIC_BUILD_ID"
+  gcloud builds log "$DIAGNOSTIC_BUILD_ID" --project "$PROJECT_ID" --region "$REGION" || true
+  exit 0
+fi
 release_tmp="$(mktemp -d)"
 trap 'rm -rf "$release_tmp"' EXIT
 export TRUESTATE_DEPLOY_TMP="$release_tmp"
@@ -39,9 +52,10 @@ build_id="$(gcloud builds submit . --project "$PROJECT_ID" --region "$REGION" --
   --timeout=1800s --tag "${image_repository}:${RELEASE_SHA}" \
   --service-account "projects/${PROJECT_ID}/serviceAccounts/${build_identity}" \
   --gcs-source-staging-dir "gs://${build_bucket}/source" --gcs-log-dir "gs://${build_bucket}/logs")"
-gcloud builds log "$build_id" --project "$PROJECT_ID" --region "$REGION" --stream
+gcloud builds log "$build_id" --project "$PROJECT_ID" --region "$REGION" --stream || true
 build_status="$(gcloud builds describe "$build_id" --project "$PROJECT_ID" --region "$REGION" --format='value(status)')"
 if [[ "$build_status" != SUCCESS ]]; then
+  describe_build "$build_id"
   printf '%s\n' "Cloud Build did not succeed: ${build_status}" >&2
   exit 1
 fi

@@ -1,6 +1,12 @@
 name: Deploy GCP
 on:
   workflow_dispatch:
+    inputs:
+      diagnostic_build_id:
+        description: 'Optional: inspect an existing Cloud Build UUID without deploying'
+        required: false
+        type: string
+        default: ''
   push:
     branches: [main]
 permissions:
@@ -10,11 +16,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   validate:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true')
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.diagnostic_build_id == '') && (github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true')
     uses: ./.github/workflows/validate.yml
   deploy:
     needs: validate
-    if: github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && (needs.validate.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.diagnostic_build_id != '' && needs.validate.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
     environment: gcp
@@ -38,6 +44,7 @@ jobs:
       SQL_DISK_SIZE_GB: ${{ vars.SQL_DISK_SIZE_GB || '50' }}
       VERTEX_PREDICTION_ENDPOINT: ${{ vars.VERTEX_PREDICTION_ENDPOINT }}
       TF_IN_AUTOMATION: 'true'
+      DIAGNOSTIC_BUILD_ID: ${{ inputs.diagnostic_build_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Validate deployment configuration
