@@ -1,0 +1,65 @@
+{
+  "id": "54bc0c84-0504-488a-bcff-72ba7a2121b6",
+  "at": "2026-10-18T07:01:03.906Z",
+  "dataset": "truestate-synthetic-v1 · fixed generator, 24 cases per scenario",
+  "count": 120,
+  "durationMs": 63.10694500000001,
+  "geminiCalls": 0,
+  "tokens": 0,
+  "notes": "Synthetic functional evaluation, not a real-world fraud benchmark. Recall uses coordinated-risk fixtures; the engine does not establish criminal intent. Timings exclude network and presentation pacing. Baselines are explicit local algorithms. No confidence calibration.",
+  "rows": [
+    {
+      "name": "Record matching",
+      "coordinatedRecall": 0,
+      "falsePositiveRate": 0,
+      "rootCauseAccuracy": null,
+      "retrievalCorrectness": null,
+      "verifiedRate": null,
+      "unnecessaryHolds": 0,
+      "meanInvestigationMs": null,
+      "meanContainmentMs": null,
+      "policyViolations": null,
+      "escalationRate": null
+    },
+    {
+      "name": "Supplier-change rules",
+      "coordinatedRecall": 100,
+      "falsePositiveRate": 0,
+      "rootCauseAccuracy": null,
+      "retrievalCorrectness": null,
+      "verifiedRate": null,
+      "unnecessaryHolds": 0,
+      "meanInvestigationMs": null,
+      "meanContainmentMs": null,
+      "policyViolations": null,
+      "escalationRate": null
+    },
+    {
+      "name": "Provenance only",
+      "coordinatedRecall": 100,
+      "falsePositiveRate": 100,
+      "rootCauseAccuracy": null,
+      "retrievalCorrectness": null,
+      "verifiedRate": null,
+      "unnecessaryHolds": 24,
+      "meanInvestigationMs": null,
+      "meanContainmentMs": null,
+      "policyViolations": null,
+      "escalationRate": null
+    },
+    {
+      "name": "Full demo workflow",
+      "coordinatedRecall": 100,
+      "falsePositiveRate": 0,
+      "rootCauseAccuracy": 100,
+      "retrievalCorrectness": 100,
+      "verifiedRate": 80,
+      "unnecessaryHolds": 0,
+      "meanInvestigationMs": 0.13348085000000048,
+      "meanContainmentMs": 0.3055555555555556,
+      "policyViolations": 0,
+      "escalationRate": 40
+    }
+  ],
+  "datasetSHA256": "55a7c525db8622d8ede38e0dad7aa795dfcb94a869977a574a29cfd1a4243504"
+}
