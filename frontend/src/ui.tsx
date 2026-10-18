@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ArrowRight, ArrowUpRight, Check, ChevronRight, CircleHelp, FileText, Fingerprint, GitBranch, Layers3, LoaderCircle, Scale, ShieldCheck, Wallet, X, type LucideIcon } from 'lucide-react';
+import { useWorkspace } from './state';
 import { title } from './core';
 export const agents: { id: string; name: string; role: string; description: string; icon: LucideIcon; color: string; checks: string[] }[] = [
   { id: 'finance', name: 'Finance', role: 'Transaction reconciliation', description: 'Checks the amount, payee and supporting records for inconsistencies.', icon: Wallet, color: 'green', checks: ['Reconcile payment details with source evidence', 'Identify missing approvals and mismatched amounts', 'Separate verified facts from assumptions'] },
@@ -7,8 +8,10 @@ export const agents: { id: string; name: string; role: string; description: stri
   { id: 'legal', name: 'Legal', role: 'Policy & obligation review', description: 'Retrieves company policies and checks the obligations that apply.', icon: Scale, color: 'amber', checks: ['Ground findings in retrieved organization policies', 'Identify required approvals and obligations', 'Report gaps without asserting legal compliance'] },
   { id: 'resolution', name: 'Resolution', role: 'Findings reconciliation', description: 'Brings findings together and preserves uncertainty for the decision rules.', icon: GitBranch, color: 'violet', checks: ['Reconcile the three specialist assessments', 'Preserve disagreements and evidence gaps', 'Recommend next steps; policy rules authorize decisions'] },
 ];
-export function Button({ children, variant = 'secondary', icon: Icon, loading, className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; icon?: LucideIcon; loading?: boolean }) {
-  return <button {...props} className={`btn btn-${variant} ${className}`} disabled={props.disabled || loading}>{loading ? <LoaderCircle size={16} className="spin" /> : Icon ? <Icon size={16} /> : null}{children}</button>;
+export function Button({ children, variant = 'secondary', icon: Icon, loading, mutating = false, className = '', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' | 'ghost' | 'danger'; icon?: LucideIcon; loading?: boolean; mutating?: boolean }) {
+  const { workspace } = useWorkspace();
+  const readOnly = mutating && workspace?.user.read_only;
+  return <button title={readOnly ? 'Public demo · viewing only' : props.title} {...props} className={`btn btn-${variant} ${className}`} disabled={props.disabled || loading || !!readOnly}>{loading ? <LoaderCircle size={16} className="spin" /> : Icon ? <Icon size={16} /> : null}{children}</button>;
 }
 export function IconButton({ label, children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) { return <button {...props} className={`icon-btn ${props.className || ''}`} aria-label={label} title={label}>{children}</button>; }
 export function Badge({ status, children }: { status: string; children?: React.ReactNode }) { return <span className={`badge status-${status}`}><i aria-hidden="true" />{children || title(status)}</span>; }

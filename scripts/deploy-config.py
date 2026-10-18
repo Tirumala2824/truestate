@@ -24,7 +24,10 @@ def inputs():
     org = env.get('ORGANIZATION_ID') or seed_org
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,100}', org):
         raise ValueError('ORGANIZATION_ID must contain 1–100 letters, digits, underscores or hyphens.')
-    return {'gemini_model': env['GEMINI_MODEL'], 'gemini_location': env.get('GEMINI_LOCATION') or 'us', 'reviewer_emails': reviewers,
+    public_demo = env.get('PUBLIC_DEMO', 'false').lower() == 'true'
+    if public_demo and (org != seed_org or not org.startswith('synthetic-')):
+        raise ValueError('Public demo must use the seeded synthetic organization.')
+    return {'public_demo': public_demo, 'gemini_model': env['GEMINI_MODEL'], 'gemini_location': env.get('GEMINI_LOCATION') or 'us', 'reviewer_emails': reviewers,
             'operator_emails': operators, 'source_connector_emails': connectors,
             'prediction_endpoint': env.get('VERTEX_PREDICTION_ENDPOINT', ''),
             'organization_id': org, 'seed_organization_id': seed_org}
@@ -47,7 +50,7 @@ def main():
         config.update({'foundation': json.loads((directory / 'foundation.json').read_text()),
                        'image': os.environ['TRUESTATE_IMAGE'], 'release_sha': os.environ['RELEASE_SHA']})
         (directory / 'runtime.tfvars.json').write_text(json.dumps(config))
-        jobs = {key: value for key, value in config.items() if key != 'operator_emails'}
+        jobs = {key: value for key, value in config.items() if key not in {'operator_emails', 'public_demo'}}
         (directory / 'jobs.tfvars.json').write_text(json.dumps(jobs))
 
 

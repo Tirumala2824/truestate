@@ -19,6 +19,11 @@ variable "foundation" {
   type = map(string)
 }
 
+variable "public_demo" {
+  type    = bool
+  default = false
+}
+
 variable "image" {
   type = string
 }
@@ -86,7 +91,7 @@ resource "google_cloud_run_v2_service" "app" {
   name                = "truestate"
   location            = var.foundation.region
   deletion_protection = false
-  iap_enabled         = true
+  iap_enabled         = !var.public_demo
   ingress             = "INGRESS_TRAFFIC_ALL"
   template {
 
@@ -112,6 +117,7 @@ resource "google_cloud_run_v2_service" "app" {
 
         for_each = merge(local.environment, {
           SERVICE_MODE = "app"
+          PUBLIC_DEMO  = tostring(var.public_demo)
           }
         )
         content {
@@ -358,4 +364,13 @@ resource "google_pubsub_topic_iam_member" "source_publishers" {
   topic    = var.foundation.event_topic
   role     = "roles/pubsub.publisher"
   member   = "serviceAccount:${each.value}"
+}
+
+# Only the application is public. Worker invokers and token checks stay enforced.
+resource "google_cloud_run_v2_service_iam_member" "public_demo" {
+  count    = var.public_demo ? 1 : 0
+  name     = google_cloud_run_v2_service.app.name
+  location = var.foundation.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }

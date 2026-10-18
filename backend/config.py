@@ -1,7 +1,7 @@
 """Configuration is explicit; no local database or synthetic service fallback."""
 import os
 from functools import lru_cache
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Settings(BaseModel):
@@ -9,6 +9,13 @@ class Settings(BaseModel):
     region: str = 'us-central1'
     organization: str = 'default'
     mode: str = 'app'
+    public_demo: bool = False
+
+    @model_validator(mode='after')
+    def validate_public_demo(self):
+        if self.public_demo and (self.mode != 'app' or not self.organization.startswith('synthetic-')):
+            raise ValueError('Public access requires an app in a synthetic-* organization.')
+        return self
     gemini_model: str = ''
     gemini_location: str = 'us'
     sql_instance: str = ''
@@ -58,5 +65,6 @@ def settings() -> Settings:
     values = {field: os.environ[name] for field, name in names.items() if os.environ.get(name)}
     values['reviewers'] = [v.strip().lower() for v in os.getenv('REVIEWER_EMAILS', '').split(',') if v.strip()]
     values['source_connectors'] = [v.strip().lower() for v in os.getenv('SOURCE_CONNECTOR_EMAILS', '').split(',') if v.strip()]
+    values['public_demo'] = os.getenv('PUBLIC_DEMO', 'false').lower() == 'true'
     values['sql_private_ip'] = os.getenv('SQL_PRIVATE_IP', 'false').lower() == 'true'
     return Settings(**values)

@@ -13,11 +13,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: ${{ (inputs.diagnostic_build_id != '' || (github.event_name == 'push' && vars.DEPLOY_ENABLED != 'true')) && format('truestate-gcp-inspection-{0}', github.run_id) || 'truestate-gcp-release' }}
+  group: ${{ (inputs.diagnostic_build_id != '' || (github.event_name == 'push' && vars.DEPLOY_ENABLED != 'true' && !contains(github.event.head_commit.message, '[deploy]'))) && format('truestate-gcp-inspection-{0}', github.run_id) || 'truestate-gcp-release' }}
   cancel-in-progress: false
 jobs:
   validate:
-    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.diagnostic_build_id == '') && (github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true')
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || inputs.diagnostic_build_id == '') && (github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true' || contains(github.event.head_commit.message, '[deploy]'))
     uses: ./.github/workflows/validate.yml
   deploy:
     needs: validate
@@ -31,6 +31,7 @@ jobs:
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      PUBLIC_DEMO: ${{ vars.PUBLIC_DEMO || 'true' }}
       GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
       GEMINI_LOCATION: ${{ vars.GEMINI_LOCATION || 'us' }}
       REVIEWER_EMAILS: ${{ vars.REVIEWER_EMAILS }}

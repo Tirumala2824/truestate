@@ -1,7 +1,7 @@
 export type RecordData = Record<string, any>;
 export type Page = 'overview' | 'queue' | 'agents' | 'evidence' | 'policies' | 'analytics' | 'audit' | 'connections';
 export type Workspace = {
-  user: { email: string; reviewer: boolean };
+  user: { email: string; reviewer: boolean; read_only?: boolean };
   transactions: RecordData[]; documents: RecordData[]; decisions: RecordData[];
   runs: RecordData[]; jobs: RecordData[]; knowledge: RecordData[]; receipts: RecordData[];
   synthetic_dataset?: RecordData | null; policy: RecordData | null; configuration: RecordData; limits: RecordData;

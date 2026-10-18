@@ -8,10 +8,15 @@ from google.auth.transport.requests import Request as GoogleRequest
 class Principal:
     email: str
     reviewer: bool = False
+    read_only: bool = False
 
 
 def user(request: Request):
     s = request.app.state.config
+    if s.public_demo:
+        if request.method not in {'GET', 'HEAD'}:
+            raise HTTPException(403, 'Public demo is read-only. Shared data cannot be changed.')
+        return Principal(email='Public visitor', read_only=True)
     token = request.headers.get('x-goog-iap-jwt-assertion', '')
     if s.mode != 'app' or not s.iap_audience or not token:
         raise HTTPException(401, 'Sign in through the configured Google IAP application.')

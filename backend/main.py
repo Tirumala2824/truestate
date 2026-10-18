@@ -100,13 +100,14 @@ def create_app(config=None, store=None, cloud=None, team=None):
         documents = [{k: v for k, v in d.items() if k not in {'text', 'entities', 'object', 'uri'}} for d in db.list('document')]
         runs = [{k: r[k] for k in ['id', 'transaction_id', 'created_at', 'snapshot_hash', 'decision'] if k in r}
                 for r in db.list('run', 100)]
-        return {'user': {'email': p.email, 'reviewer': p.reviewer}, 'transactions': db.list('transaction'),
+        return {'user': {'email': p.email, 'reviewer': p.reviewer, 'read_only': p.read_only}, 'transactions': db.list('transaction'),
                 'documents': documents, 'decisions': db.list('decision'), 'runs': runs,
                 'jobs': db.jobs(), 'policy': db.get('configuration', 'automation_policy'),
                 'knowledge': db.list('knowledge'), 'receipts': db.list('receipt'),
                 'synthetic_dataset': db.synthetic_dataset(),
                 'configuration': {'missing': app.state.config.missing(), 'model': app.state.config.gemini_model,
-                    'prediction_configured': bool(app.state.config.prediction_endpoint)},
+                    'prediction_configured': bool(app.state.config.prediction_endpoint),
+                    'service_checks': (db.get('configuration', 'release_verification') or {}).get('checks', {}).get('resource_access') if p.read_only else None},
                 'limits': {'transactions_displayed': 200, 'documents_displayed': 200, 'runs_displayed': 100}}
 
     @app.post('/api/transactions/import')
@@ -250,6 +251,9 @@ def create_app(config=None, store=None, cloud=None, team=None):
 
     @app.get('/api/analytics')
     async def analytics(p: Principal = Depends(user)):
+        if p.read_only:
+            # Shared BigQuery tables can contain records from other organizations.
+            return {'rows': [], 'source': 'Public synthetic workspace'}
         return {'rows': await asyncio.to_thread(app.state.cloud.analytics), 'source': 'BigQuery'}
 
     @app.post('/api/connections/verify')
