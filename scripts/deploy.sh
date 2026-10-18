@@ -19,6 +19,8 @@ apply_root() {
   terraform -chdir="$root" init -input=false -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="prefix=${prefix}"
   terraform -chdir="$root" validate -no-color
   terraform -chdir="$root" plan -input=false -lock-timeout=300s -var-file="$vars" -out="$release_tmp/${prefix}.tfplan"
+  terraform -chdir="$root" show -json "$release_tmp/${prefix}.tfplan" > "$release_tmp/${prefix}.plan.json"
+  python3 scripts/check_terraform_plan.py "$release_tmp/${prefix}.plan.json"
   terraform -chdir="$root" apply -input=false -auto-approve "$release_tmp/${prefix}.tfplan"
 }
 

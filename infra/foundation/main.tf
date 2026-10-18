@@ -351,12 +351,22 @@ resource "google_document_ai_processor" "documents" {
 resource "google_discovery_engine_data_store" "knowledge" {
 
   location          = var.search_location
-  data_store_id     = "truestate-policies"
+  data_store_id     = "truestate-policies-v2"
   display_name      = "TRUESTATE organization policies"
   industry_vertical = "GENERIC"
   content_config    = "CONTENT_REQUIRED"
   solution_types    = ["SOLUTION_TYPE_SEARCH"]
-  depends_on        = [google_project_service.enabled]
+  acl_enabled       = false
+  # Match the API's default so refresh does not propose a replacement on retry.
+  document_processing_config {
+    default_parsing_config {
+      digital_parsing_config {}
+    }
+  }
+  lifecycle {
+    prevent_destroy = true
+  }
+  depends_on = [google_project_service.enabled]
 
 }
 

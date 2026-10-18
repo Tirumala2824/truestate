@@ -66,7 +66,9 @@ The workflow runs these gates in order:
 8. Apply the application and worker configuration. `/readyz` rejects incompatible schemas or an unverified seed manifest, so an unready new revision does not pass startup.
 9. Print the Cloud Run URL in the Actions summary.
 
-The pipeline stops on a failed gate. It does not apply application changes when migration, loading or pre-release checks fail. Infrastructure provisioned earlier in a failed run remains for diagnosis and retry; it is not automatically destroyed. Previously deployed services remain on their earlier release until the service-apply stage. Application and worker updates within that stage are not an atomic cross-service rollout; future migrations must remain compatible with the preceding release.
+The pipeline stops on a failed gate. Every saved Terraform plan is inspected before apply; automatic deployment rejects all resource deletions and replacements. Such changes need an explicit infrastructure migration. The Search data store also has `prevent_destroy` protection and explicitly declares Google's default digital parser to avoid replacement caused by refreshed API defaults. The current store ID is `truestate-policies-v2`; the original empty store ID entered Google's asynchronous deletion process during the initial deployment retry.
+
+The pipeline does not apply application changes when migration, loading or pre-release checks fail. Infrastructure provisioned earlier in a failed run remains for diagnosis and retry; it is not automatically destroyed. Previously deployed services remain on their earlier release until the service-apply stage. Application and worker updates within that stage are not an atomic cross-service rollout; future migrations must remain compatible with the preceding release.
 
 ## Synthetic data behavior
 
