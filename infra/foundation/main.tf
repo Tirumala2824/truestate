@@ -92,6 +92,7 @@ resource "google_service_account" "build" {
 }
 
 resource "google_project_iam_member" "runtime" {
+  project = var.project_id
 
   for_each = toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser", "roles/aiplatform.user",
   "roles/documentai.apiUser", "roles/discoveryengine.editor", "roles/bigquery.jobUser", "roles/logging.logWriter"])
@@ -101,6 +102,7 @@ resource "google_project_iam_member" "runtime" {
 }
 
 resource "google_project_iam_member" "migration_sql" {
+  project = var.project_id
 
   role   = "roles/cloudsql.client"
   member = "serviceAccount:${google_service_account.migrate.email}"
@@ -108,6 +110,7 @@ resource "google_project_iam_member" "migration_sql" {
 }
 
 resource "google_project_iam_member" "build_logs" {
+  project = var.project_id
 
   role   = "roles/logging.logWriter"
   member = "serviceAccount:${google_service_account.build.email}"
