@@ -45,6 +45,7 @@ jobs:
       SQL_DISK_SIZE_GB: ${{ vars.SQL_DISK_SIZE_GB || '50' }}
       VERTEX_PREDICTION_ENDPOINT: ${{ vars.VERTEX_PREDICTION_ENDPOINT }}
       TF_IN_AUTOMATION: 'true'
+      CLOUDSDK_CORE_DISABLE_PROMPTS: '1'
       DIAGNOSTIC_BUILD_ID: ${{ inputs.diagnostic_build_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -75,6 +76,8 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
       - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+        with:
+          install_components: beta
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.13.5
