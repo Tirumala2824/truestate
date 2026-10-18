@@ -34,6 +34,14 @@ if [[ -n "${DIAGNOSTIC_BUILD_ID:-}" ]]; then
   gcloud logging read "resource.type=\"build\" AND resource.labels.build_id=\"${DIAGNOSTIC_BUILD_ID}\"" \
     --project "$PROJECT_ID" --freshness=24h --limit=30 --order=asc \
     --format='json(timestamp,severity,textPayload,jsonPayload.message,protoPayload.status)' || true
+  for job_name in truestate-release-migrate truestate-seed truestate-release-verify; do
+    printf 'Release job: %s\n' "$job_name"
+    gcloud run jobs executions list --job "$job_name" --project "$PROJECT_ID" --region "$REGION" \
+      --limit=1 --format='json(metadata.name,status.conditions,status.succeededCount,status.failedCount,status.runningCount,status.startTime,status.completionTime)' || true
+    gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${job_name}\" AND resource.labels.location=\"${REGION}\"" \
+      --project "$PROJECT_ID" --freshness=1h --limit=12 --order=desc \
+      --format='json(timestamp,severity,textPayload,jsonPayload.message)' || true
+  done
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf '## Diagnostic check completed\n\n**This run did not deploy an application.**\n\nInspected Cloud Build `%s`. See the job logs for its status and diagnostics.\n' \
       "$DIAGNOSTIC_BUILD_ID" >> "$GITHUB_STEP_SUMMARY"
