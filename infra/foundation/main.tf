@@ -108,7 +108,7 @@ resource "google_project_iam_member" "runtime" {
   project = var.project_id
 
   for_each = toset(["roles/cloudsql.client", "roles/cloudsql.instanceUser", "roles/aiplatform.user",
-  "roles/documentai.apiUser", "roles/discoveryengine.editor", "roles/bigquery.jobUser", "roles/logging.logWriter"])
+  "roles/documentai.apiUser", "roles/documentai.viewer", "roles/discoveryengine.editor", "roles/bigquery.jobUser", "roles/logging.logWriter"])
   role   = each.value
   member = "serviceAccount:${google_service_account.runtime.email}"
 

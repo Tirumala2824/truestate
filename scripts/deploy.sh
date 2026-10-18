@@ -40,7 +40,7 @@ if [[ -n "${DIAGNOSTIC_BUILD_ID:-}" ]]; then
       --limit=1 --format='json(metadata.name,status.conditions,status.succeededCount,status.failedCount,status.runningCount,status.startTime,status.completionTime)' || true
     gcloud logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${job_name}\" AND resource.labels.location=\"${REGION}\"" \
       --project "$PROJECT_ID" --freshness=1h --limit=12 --order=desc \
-      --format='json(timestamp,severity,textPayload,jsonPayload.message)' || true
+      --format='json(timestamp,severity,textPayload,jsonPayload)' || true
   done
   if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf '## Diagnostic check completed\n\n**This run did not deploy an application.**\n\nInspected Cloud Build `%s`. See the job logs for its status and diagnostics.\n' \

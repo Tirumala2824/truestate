@@ -59,7 +59,8 @@ def main():
         probes = cloud.verify()
         failed = [name for name, result in probes.items() if result['status'] == 'error']
         if failed:
-            raise RuntimeError('Service access check failed: ' + ', '.join(failed))
+            raise RuntimeError('Service access check failed: ' + ', '.join(
+                f'{name} ({probes[name]["error_type"]})' for name in failed))
         checks['resource_access'] = probes
         result = cloud.genai.models.generate_content(model=s.gemini_model,
             contents='For a supplier-payment assessment without invoice evidence, respond only: NEEDS_EVIDENCE.',
