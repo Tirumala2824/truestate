@@ -14,9 +14,10 @@ class Principal:
 def user(request: Request):
     s = request.app.state.config
     if s.public_demo:
-        if request.method not in {'GET', 'HEAD'}:
-            raise HTTPException(403, 'Public demo is read-only. Shared data cannot be changed.')
-        return Principal(email='Public visitor', read_only=True)
+        from .sandbox import current_store
+        if current_store.get() is None:
+            raise HTTPException(401, 'Open the workspace to start your sandbox.')
+        return Principal(email='Sandbox visitor')
     token = request.headers.get('x-goog-iap-jwt-assertion', '')
     if s.mode != 'app' or not s.iap_audience or not token:
         raise HTTPException(401, 'Sign in through the configured Google IAP application.')

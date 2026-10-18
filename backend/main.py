@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from pathlib import Path
+from copy import copy
 from uuid import uuid4
 from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File, Form, Header
 from fastapi.responses import JSONResponse, StreamingResponse, Response, FileResponse
@@ -15,7 +16,8 @@ from .config import settings
 from .auth import user, service, reviewer, Principal
 from .schemas import TransactionInput, ExplainInput, DecisionInput, StrictModel
 from .domain import snapshot, AutomationPolicy, decision_current, utcnow, digest
-from .store import cloud_store, Conflict
+from .store import cloud_store, Store, Conflict
+from .sandbox import COOKIE, SANDBOX, current_store, new_token, valid_token, organization, initialize, reserve, worker_organizations
 from .gcp import GoogleCloud
 from .agents import AgentTeam
 from .pipeline import Pipeline
@@ -31,15 +33,28 @@ def create_app(config=None, store=None, cloud=None, team=None):
     app.state.cloud = cloud or GoogleCloud(app.state.config)
     app.state.team = team or AgentTeam(app.state.config)
 
-    def database():
+    def base_database():
         if app.state.store is None:
             if app.state.config.missing():
                 raise HTTPException(503, 'GCP configuration is incomplete. Complete deployment before importing data.')
             app.state.store = cloud_store(app.state.config)
         return app.state.store
 
-    def pipeline():
-        return Pipeline(database(), app.state.cloud, app.state.team)
+    def database():
+        return current_store.get() or base_database()
+
+    def scoped_services(org):
+        config = app.state.config.model_copy(update={'organization': org})
+        cloud = copy(app.state.cloud)
+        cloud.s = config
+        team = copy(app.state.team)
+        team.s = config
+        return cloud, team
+
+    def pipeline(org=None):
+        db = Store(base_database().engine, org) if org else database()
+        cloud, team = scoped_services(db.org)
+        return Pipeline(db, cloud, team)
 
     def get_record(kind, key):
         result = database().get(kind, key)
@@ -81,6 +96,28 @@ def create_app(config=None, store=None, cloud=None, team=None):
             result.headers['Cache-Control'] = 'no-store'
         return result
 
+    @app.middleware('http')
+    async def public_sandbox(request, call_next):
+        if not app.state.config.public_demo or not request.url.path.startswith('/api/'):
+            return await call_next(request)
+        token = request.cookies.get(COOKIE)
+        fresh = not valid_token(token)
+        if fresh and request.url.path != '/api/workspace':
+            return JSONResponse(status_code=401, content={'detail': 'Open the workspace to start your sandbox.'})
+        token = new_token() if fresh else token
+        try:
+            db = await asyncio.to_thread(initialize, base_database(), organization(token), app.state.config.policy_path)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={'detail': exc.detail})
+        scope = current_store.set(db)
+        try:
+            response = await call_next(request)
+            if fresh:
+                response.set_cookie(COOKIE, token, httponly=True, secure=True, samesite='strict', max_age=86400)
+            return response
+        finally:
+            current_store.reset(scope)
+
     @app.get('/healthz')
     def health():
         return {'status': 'process_running', 'configured': not bool(app.state.config.missing())}
@@ -89,7 +126,7 @@ def create_app(config=None, store=None, cloud=None, team=None):
     def readiness():
         from .release_check import ready
         try:
-            return ready(database().engine)
+            return ready(base_database().engine)
         except Exception:
             log.exception('Release readiness check failed')
             raise HTTPException(503, 'Database schema or required dataset is not ready.')
@@ -104,10 +141,11 @@ def create_app(config=None, store=None, cloud=None, team=None):
                 'documents': documents, 'decisions': db.list('decision'), 'runs': runs,
                 'jobs': db.jobs(), 'policy': db.get('configuration', 'automation_policy'),
                 'knowledge': db.list('knowledge'), 'receipts': db.list('receipt'),
-                'synthetic_dataset': db.synthetic_dataset(),
+                'synthetic_dataset': base_database().synthetic_dataset() if app.state.config.public_demo else db.synthetic_dataset(),
+                'sandbox': {'enabled': app.state.config.public_demo, 'assessment_limit': 10, 'upload_limit': 20, 'sample_records': 25},
                 'configuration': {'missing': app.state.config.missing(), 'model': app.state.config.gemini_model,
                     'prediction_configured': bool(app.state.config.prediction_endpoint),
-                    'service_checks': (db.get('configuration', 'release_verification') or {}).get('checks', {}).get('resource_access') if p.read_only else None},
+                    'service_checks': (base_database().get('configuration', 'release_verification') or {}).get('checks', {}).get('resource_access') if app.state.config.public_demo else None},
                 'limits': {'transactions_displayed': 200, 'documents_displayed': 200, 'runs_displayed': 100}}
 
     @app.post('/api/transactions/import')
@@ -128,6 +166,10 @@ def create_app(config=None, store=None, cloud=None, team=None):
                 transactions.append(TransactionInput.model_validate(row).model_dump(mode='json'))
         except (ValueError, ValidationError, UnicodeDecodeError) as exc:
             raise HTTPException(422, str(exc)[:1000])
+        if app.state.config.public_demo:
+            if len(transactions) > 10:
+                raise HTTPException(422, 'Import up to 10 transactions per sandbox batch.')
+            await asyncio.to_thread(reserve, database(), 'assessment', len(transactions))
         result = await asyncio.to_thread(database().ingest, transactions, idempotency_key, p.email)
         # The SQL outbox commits first. Scheduler retries if publication is unavailable.
         try:
@@ -164,6 +206,7 @@ def create_app(config=None, store=None, cloud=None, team=None):
         signatures = {'application/pdf': b'%PDF-', 'image/png': b'\x89PNG', 'image/jpeg': b'\xff\xd8'}
         if file.content_type in signatures and not content.startswith(signatures[file.content_type]):
             raise HTTPException(415, 'Document bytes do not match the declared file type.')
+        await asyncio.to_thread(reserve, database(), 'upload')
         doc_id = 'doc-' + uuid4().hex
         metadata = await asyncio.to_thread(app.state.cloud.put_object,
             f'{database().org}/evidence/{doc_id}', content, file.content_type)
@@ -214,6 +257,7 @@ def create_app(config=None, store=None, cloud=None, team=None):
     @app.post('/api/transactions/{target}/run')
     async def run(target: str, p: Principal = Depends(user)):
         get_record('transaction', target)
+        await asyncio.to_thread(reserve, database(), 'assessment')
         job_id = await asyncio.to_thread(database().invalidate, target, 'Reassessment requested')
         try:
             await pipeline().dispatch()
@@ -251,13 +295,13 @@ def create_app(config=None, store=None, cloud=None, team=None):
 
     @app.get('/api/analytics')
     async def analytics(p: Principal = Depends(user)):
-        if p.read_only:
-            # Shared BigQuery tables can contain records from other organizations.
-            return {'rows': [], 'source': 'Public synthetic workspace'}
-        return {'rows': await asyncio.to_thread(app.state.cloud.analytics), 'source': 'BigQuery'}
+        cloud, _ = scoped_services(database().org)
+        return {'rows': await asyncio.to_thread(cloud.analytics), 'source': 'BigQuery'}
 
     @app.post('/api/connections/verify')
     async def verify(p: Principal = Depends(user)):
+        if app.state.config.public_demo:
+            return (base_database().get('configuration', 'release_verification') or {}).get('checks', {}).get('resource_access', {})
         checks = await asyncio.to_thread(app.state.cloud.verify)
         checks['Cloud SQL'] = {'status': 'reachable'}
         await asyncio.to_thread(database().put, 'configuration', 'connection_checks', {'checks': checks, 'checked_at': utcnow().isoformat()})
@@ -283,12 +327,13 @@ def create_app(config=None, store=None, cloud=None, team=None):
 
     @app.get('/api/events')
     async def events(request: Request, after: int = 0, target: str | None = None, p: Principal = Depends(user)):
+        db = database()
         async def stream():
             cursor = max(after, int(request.headers.get('last-event-id', '0')))
             for _ in range(240):
                 if await request.is_disconnected():
                     break
-                rows = await asyncio.to_thread(database().events, cursor, target)
+                rows = await asyncio.to_thread(db.events, cursor, target)
                 for row in rows:
                     cursor = row['seq']
                     yield f'id: {cursor}\nevent: activity\ndata: {json.dumps(row)}\n\n'
@@ -301,6 +346,7 @@ def create_app(config=None, store=None, cloud=None, team=None):
     async def explain(run_id: str, body: ExplainInput, p: Principal = Depends(user)):
         from google.genai import types
         report = get_record('run', run_id)
+        await asyncio.to_thread(reserve, database(), 'explanation')
         async def stream():
             try:
                 async with asyncio.timeout(90):
@@ -325,7 +371,10 @@ def create_app(config=None, store=None, cloud=None, team=None):
             message = envelope['message']
             payload = json.loads(base64.b64decode(message['data'], validate=True))
             if set(payload) == {'job_id'}:
-                return await pipeline().execute(payload['job_id'])
+                org = message.get('attributes', {}).get('organization', app.state.config.organization)
+                if org != app.state.config.organization and not SANDBOX.fullmatch(org):
+                    raise ValueError('Unsupported organization')
+                return await pipeline(org).execute(payload['job_id'])
             if payload.get('type') == 'transaction.ingested' and set(payload) <= {'type', 'transactions'}:
                 records = [TransactionInput.model_validate(t).model_dump(mode='json') for t in payload['transactions']]
                 if not 1 <= len(records) <= 1000:
@@ -341,8 +390,12 @@ def create_app(config=None, store=None, cloud=None, team=None):
     @app.post('/internal/dispatch')
     async def dispatch(request: Request):
         service(request)
-        await pipeline().check_indexing()
-        return {'published': await pipeline().dispatch()}
+        count = 0
+        for org in set(worker_organizations(base_database()) + [app.state.config.organization]):
+            worker = pipeline(org)
+            await worker.check_indexing()
+            count += await worker.dispatch()
+        return {'published': count}
 
     @app.post('/internal/decision-check')
     async def check_decision(request: Request):

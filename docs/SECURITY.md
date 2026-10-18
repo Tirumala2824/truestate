@@ -18,4 +18,8 @@ The Terraform state contains sensitive migration credentials and must remain in 
 
 ## Public prototype access
 
-`PUBLIC_DEMO=true` opens the application without Google sign-in, only in the seeded `synthetic-*` organization. Anonymous visitors have read-only access; all API mutations and internal worker endpoints remain blocked. BigQuery analytics are not exposed to anonymous callers because the table may contain other organizations. Set the GitHub variable `PUBLIC_DEMO=false` and redeploy to require IAP again. Main-branch commits explicitly marked `[deploy]` trigger the full release pipeline, as do manually dispatched releases.
+`PUBLIC_DEMO=true` opens the app without Google sign-in. An HttpOnly, Secure, SameSite=Strict browser cookie owns an isolated `synthetic-sandbox-*` namespace. Each visitor receives 25 copies of seeded test transactions, can upload evidence and request Gemini assessments. Public visitors have no reviewer privileges; policy administration and reviewed decisions remain restricted. Database queries, evidence object paths, Pub/Sub delivery, agent sessions and BigQuery queries use the sandbox organization. Original seed records remain unchanged.
+
+Daily SQL-backed quotas apply across Cloud Run instances: 20 uploads and 10 assessment requests per visitor; project-wide caps are 100 uploads and 100 assessment requests. Automatic investigations/retries have a separate 30-per-visitor and 300-project-wide model-run cap. New sandboxes are capped at 200 per day. The cookie lasts 24 hours; clearing it loses browser access to that sandbox. Use test documents. Uploaded files are processed by Google Cloud.
+
+Public sandboxes force external actions off. No payment, legal execution or external connector action is authorized. The worker requires its existing Google service identity. Set the GitHub variable `PUBLIC_DEMO=false` and redeploy to require IAP again. Main-branch commits marked `[deploy]` explicitly trigger a release.

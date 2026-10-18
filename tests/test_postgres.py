@@ -139,3 +139,23 @@ def test_two_million_actual_postgres_rows_and_indexed_workspace(pg, monkeypatch)
     assert ready(pg)['status'] == 'ready'
     print(json.dumps({'scale_test': 'passed', 'verified_transactions': DEFAULT_ROWS,
                       'elapsed_seconds': round(time.monotonic() - started, 2)}))
+
+
+def test_public_sandbox_budget_is_atomic_across_connections(pg):
+    from concurrent.futures import ThreadPoolExecutor
+    from fastapi import HTTPException
+    from backend.sandbox import initialize, organization, reserve
+    upgrade_database(pg)
+    base = Store(pg, 'synthetic-demo')
+    sandbox = initialize(base, organization('c' * 64), 'automation-policy.yaml')
+    def charge(_):
+        try:
+            reserve(sandbox, 'assessment')
+            return True
+        except HTTPException as exc:
+            assert exc.status_code == 429
+            return False
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(charge, range(20)))
+    assert sum(results) == 10
+    assert initialize(base, sandbox.org, 'automation-policy.yaml').org == sandbox.org

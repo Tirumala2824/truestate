@@ -4,6 +4,7 @@ export type Workspace = {
   user: { email: string; reviewer: boolean; read_only?: boolean };
   transactions: RecordData[]; documents: RecordData[]; decisions: RecordData[];
   runs: RecordData[]; jobs: RecordData[]; knowledge: RecordData[]; receipts: RecordData[];
+  sandbox?: { enabled: boolean; assessment_limit: number; upload_limit: number; sample_records: number };
   synthetic_dataset?: RecordData | null; policy: RecordData | null; configuration: RecordData; limits: RecordData;
 };
 export const pageNames: Record<Page, string> = { overview: 'Overview', queue: 'Work queue', agents: 'Agents', evidence: 'Evidence', policies: 'Policies', analytics: 'Analytics', audit: 'Audit trail', connections: 'Connections' };

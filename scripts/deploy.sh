@@ -102,6 +102,9 @@ gcloud run jobs execute truestate-seed --project "$PROJECT_ID" --region "$REGION
 gcloud run jobs execute truestate-release-verify --project "$PROJECT_ID" --region "$REGION" --wait
 apply_root infra/runtime "$release_tmp/runtime.tfvars.json" runtime
 app_url="$(terraform -chdir=infra/runtime output -raw app_url)"
+if [[ "${PUBLIC_DEMO:-false}" == true ]]; then
+  python3 scripts/smoke-public-sandbox.py "$app_url"
+fi
 printf '%s\n' "Release ${RELEASE_SHA} deployed: ${app_url}"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
   {
@@ -111,6 +114,10 @@ if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf -- '- Alembic migration: passed\n- Synthetic transactions: **2,000,000 verified**\n'
     printf -- '- Runtime IAM, Gemini, Document AI, Search, BigQuery, private storage and Pub/Sub permission checks: passed\n'
     printf -- '- App and worker startup readiness: passed\n'
-    printf '\nSign in with a configured Google identity. Human IAP login, connector execution and model quality still require acceptance testing.\n'
+    if [[ "${PUBLIC_DEMO:-false}" == true ]]; then
+      printf '\nPublic sandboxes need no login. Upload, Document AI, Gemini assessments, analytics and visitor isolation passed live checks. External actions remain disabled.\n'
+    else
+      printf '\nSign in with a configured Google identity. Human IAP login and connector execution require acceptance testing.\n'
+    fi
   } >> "$GITHUB_STEP_SUMMARY"
 fi

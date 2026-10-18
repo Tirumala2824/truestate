@@ -91,6 +91,8 @@ class Pipeline:
         if saved:
             await self.finalize(saved)
             return
+        from .sandbox import reserve
+        await asyncio.to_thread(reserve, store, 'model_run')
         async def emit(kind, data):
             await asyncio.to_thread(store.event, target, kind, {'run_id': run_id, **data})
         await emit('investigation.started', {})
