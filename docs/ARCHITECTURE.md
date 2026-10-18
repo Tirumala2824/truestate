@@ -1,58 +1,31 @@
-# Architecture
+# Evidence-bound operations
 
-## Execution, not replay
-
-A synthetic event enters through `POST /api/events` or the simulation endpoint. Its external event ID is deduplicated inside the user's durable workspace. `consumeEvent()` opens a case automatically; the client never sends a chat instruction to an investigator.
-
-The six roles operate real implemented local tools:
-
-| Role | Tools and responsibility |
-|---|---|
-| Event Sentinel | Inspect changed account; create a case from an event |
-| Evidence Provenance Investigator | Reconcile source values; extract claims; recursively trace dependencies |
-| Financial Investigation Reasoner | Open competing hypotheses; choose history vs. signed-approval lookup; revise explanations |
-| Independent Verification Agent | Retrieve synthetic signed contract / pre-established contact evidence |
-| Containment Planner | Evaluate deterministic hold policy; invoke the mock queue with an idempotency key |
-| Outcome Verification & Audit Agent | Read payment state, retry once when appropriate, compare unrelated payments, finalize report |
-
-The reasoner revisits hypotheses after independent evidence arrives. A confirmed legitimate update contradicts the compromise hypothesis; absence of evidence produces uncertainty. A new account alone is never sufficient to assert fraud.
+TRUESTATE v2 is an event-driven vendor-payment and supplier-change control prototype for finance, security, and legal operations. It is not a general assistant, legal practice system, SIEM, bank, or ERP. The initial concrete workflow is: assess a real supplier payment against supporting documents and organization policies; record a time-limited decision; invalidate and reassess it when its inputs change.
 
 ```mermaid
 flowchart TD
-  E[Account-change event] --> C[Case and source claims]
-  C --> G[Provenance reconstruction]
-  G --> H[Competing hypotheses]
-  H --> V[Independent evidence tool]
-  V --> R[Reassess evidence and uncertainty]
-  R --> P{Deterministic policy}
-  P -->|Verified change| N[No fraud hold]
-  P -->|Authorized risk hold| A[Single-payment simulator]
-  P -->|Insufficient authority| X[Human escalation]
-  A --> O{Read back outcome}
-  O -->|Timeout and retry available| A
-  O -->|Held and unrelated unchanged| D[Auditable containment]
-  O -->|Still queued after retry| X
-  N --> D
+  S["Source connectors / operations console"] --> I["Cloud Run ingestion"]
+  I --> D["Cloud SQL records + outbox"]
+  D --> P["Pub/Sub + private worker"]
+  P --> E["Document AI + private evidence storage"]
+  P --> K["Vertex AI Search + prediction endpoint"]
+  E --> A["ADK finance, security, legal agents"]
+  K --> A
+  A --> R["Gemini resolution + deterministic policy"]
+  R --> D
+  R --> B["BigQuery + evidence capsule"]
+  D --> X["Version-bound action request"]
+  X --> C["Connected system preflight + receipt"]
 ```
 
-## Persistence and concurrency
+The three specialist agents run in parallel through Google ADK. A fourth reconciles their findings. Skills are actual version-controlled instruction files in `agents/skills`; they are loaded at runtime, not merely listed in documentation. All inference uses Gemini on Vertex AI and Application Default Credentials. Workflow summaries are streamed through persisted SQL events; bounded explanation sections use genuine Gemini token streaming. No general chat endpoint exists.
 
-Hosted state is a JSON aggregate in D1, keyed by the authenticated Site user. The aggregate is a transaction boundary for case, evidence, policy, and simulated payment state. Each mutation uses an expected revision and a random mutation token. The payment snapshot and fresh audit events are committed in one D1 batch. Audit inserts are conditional on the winning mutation token, so losing concurrent writers cannot append receipts for actions they did not commit. SQL triggers reject audit updates and deletes.
+Managed components are reused directly: Document AI's pretrained OCR processor handles PDFs and images; UTF-8 documents and exported emails use a deterministic decoder; Vertex AI Search indexes approved company policies; Google ADK orchestrates specialists. The predictive endpoint is a separate real Vertex model. A missing endpoint returns `not_configured`, never an invented score. Policies that require predictions cannot automatically clear without one.
 
-FastAPI uses SQLAlchemy with the same snapshot / optimistic-version structure, an immutable audit table, and a normalized domain projection. `backend/models.py` declares all requested domain entities. Claims include the full provenance and integrity fields. The first migration is provided for SQLite and PostgreSQL; startup applies the current schema for this prototype. Use a reviewed migration system for future production schema changes.
+One deployment serves one organization. Cloud SQL PostgreSQL stores authoritative records, versions, jobs, inbox idempotency keys, decisions, action requests, receipts, and audit events. Short organization-scoped PostgreSQL advisory locks serialize mutations; network calls occur outside these transactions. Inputs and job creation commit together. A scheduler republishes unsent outbox work and recovers abandoned leases. The worker retries failures up to three claimed attempts; failed jobs remain visible. Pub/Sub also has a retained dead-letter subscription for delivery failures and invalid messages.
 
-The domain projection includes organizations, suppliers, trusted_supplier_contacts, bank_accounts, purchase_orders, invoices, invoice_line_items, approval_events, account_change_events, payments, payment_batches, source_documents, evidence_claims, evidence_dependencies, investigation_cases, agent_runs, agent_tool_calls, hypotheses, verification_requests, policy_decisions, containment_actions, audit_events, and users_and_roles. Core investigation/payment/evidence entities are projected from executions. Procurement entities without input documents remain empty rather than containing fabricated business data.
+Original files are generation-addressed in private Cloud Storage. Reports become immutable-by-key evidence capsules. BigQuery receives idempotent assessment events and aggregates each currency separately. Prediction features include currency so the supplied baseline rejects a currency it was not trained on.
 
-Tenant identity is bound by the authenticated transport, not chosen by an agent tool. The hosted aggregate prevents cross-tenant case reads. FastAPI query helpers require the server's Principal. A production SQL deployment must also restrict database roles and add RLS if multiple application roles receive direct database access.
+A decision binds transaction contents, document versions and hashes, declared ancestry, connector attestations, the automation policy, and the entire registered policy corpus. Inserting, retiring, or replacing a policy therefore changes the decision's input snapshot even when that policy was not returned by search. Policy registration is distinguished from search readiness; the scheduler checks submitted policies and triggers reassessment when they become retrievable.
 
-## Streaming and stopping
-
-The hosted response streams full saved snapshots as SSE. It performs one tool stage per transition with 550 ms presentation pacing. The measured end-to-end demo duration includes this pacing; tool receipt times and evaluation measurements do not. The portable API uses 200 ms pacing for its SSE transport and no pacing for event ingestion.
-
-A run has 13 bounded stages, a 60-second deadline, and at most two hold attempts. The same action key is reused for safe retry. A payment already held is idempotently acknowledged without another action. Explicit human recovery marks interrupted work as escalated after the deadline. There is one active run per workspace to avoid ambiguous simultaneous case mutations. For continuous production operation, replace the request-scoped driver with a durable job runner and lease/heartbeat recovery; this is a known extension point.
-
-## Google Cloud path
-
-Cloud mode in FastAPI requires PostgreSQL. At the independent-evidence checkpoint, six ADK agents perform live advisory investigation with case-scoped read tools and an advisory hold proposal. Their final citations are validated against existing evidence IDs. They cannot call the simulated payment execution or release tools. The authoritative deterministic engine evaluates policy from stored evidence independently of model text.
-
-The included adapters call Gemini, BigQuery, Document AI, Agent Search, Pub/Sub, and GCS when configured. They do not silently fall back to mock responses. The hosted Site has no Google Cloud credentials and reports those services as unconfigured. Native data ingestion into the synthetic fixture model, production identity, durable ADK sessions, and signed-document verification require additional integration work.
+The console exposes work queues, evidence provenance, current decisions, configuration, measured analytics, service checks, and receipts. A case can export its actual JSON report. The interface has responsive layouts and keyboard-operable dialogs. It contains no seeded transaction, document, supplier, risk score, model accuracy, or revenue data.

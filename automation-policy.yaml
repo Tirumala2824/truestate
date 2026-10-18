@@ -1,0 +1,11 @@
+# Organization-owned automation policy. No currency thresholds are invented.
+version: "1"
+auto_hold: true
+auto_clear: false
+max_auto_hold_amount: {}
+minimum_attested_origins: 2
+minimum_confidence: 0.9
+decision_ttl_minutes: 30
+prediction_required_for_clear: true
+prediction_high_risk_threshold: 0.8
+external_actions: disabled

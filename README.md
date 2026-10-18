@@ -1,153 +1,100 @@
-# TRUESTATE — Autonomous Financial Truth & Risk
+# TRUESTATE · Evidence-bound operations
 
-**When every financial record agrees, but the truth is wrong.**
+A GCP-backed operations console for supplier-payment and vendor-change reviews across finance, security, and legal teams. Four Google ADK agents process the work automatically; people work from a queue of evidence gaps and exceptions. There is no general chat interface.
 
-A runnable hackathon platform for Meridian Finance Operations. It investigates synthetic supplier-account changes, reconstructs evidence provenance, retrieves independent records, applies a policy-authorized hold to a simulated payment, verifies the result, and preserves an audit report.
+**Deployment status:** source implementation and local tests are provided. No Google Cloud project or credentials were available in the development session, so this version has not been deployed or end-to-end verified against live GCP services. Real model responses, OCR, search indexing, Cloud SQL IAM, IAP and external execution still need a project acceptance run. The old hosted demo is not this implementation.
 
-## What works
+## What works in the implementation
 
-- One ChatGPT-style conversation: describe a task, get results inline, and ask contextual follow-up questions without navigating separate product pages.
-- Searchable conversation history, contextual next steps, plain-language explanations, inline payment tables and evidence cards.
-- Responsive workspace with light/dark themes, live queue counts, a compact composer, keyboard quick actions (Ctrl/Cmd + K), and per-conversation drafts retained in this browser tab.
-- Tablet drawer navigation, phone payment/evaluation cards, 44 px touch controls, safe-area spacing, keyboard-aware viewport height, scrollable dialogs, and an opt-in touch graph with a readable source list.
-- Drag-and-drop files, one-click sample invoice preparation, reusable saved evidence, extraction progress and cancellation.
-- Inline reviewer reason entry, exact-action confirmation, expiry feedback, and a four-stage investigation progress view.
-- A fail-closed financial command grammar checked on the server. Unrelated, mixed, disguised, and unsupported requests receive an explicit scope rejection.
-- Multimodal evidence: PDF, PNG/JPG/WebP images with English OCR, and TXT/CSV records. Optional browser voice dictation passes through the same scope gate.
-- Real SSE status, response chunks, and investigation events; local extraction and upload progress. Private source-file storage in R2 (hosted) or a configurable filesystem volume (portable).
-- A real event-driven, 13-step investigation with six specialist roles. DEMO MODE runs actual deterministic tool functions, not prerecorded messages or invented Gemini outputs.
-- Five scenarios, 120 seeded payments, and a frozen 120-case evaluation dataset.
-- Clickable React Flow graph, exact evidence IDs, competing hypotheses, explicit uncertainty, live SSE tool receipts, and bounded retries.
-- D1 persistence on the private hosted Site. A portable FastAPI backend uses SQLite or PostgreSQL with a normalized domain projection.
-- Reviewer-authorized simulated holds and releases; idempotent agent actions; unrelated-payment checks; immutable audit triggers; tenant scoping.
-- PDF and JSON investigation exports, including tool receipts and evidence references.
-- Optional real Google ADK/Gemini advisory reasoning and clean Google Cloud adapters. **These integrations are not configured or live-tested in the hosted demo.**
+- Actual transaction import through CSV or authenticated Pub/Sub events, with idempotency and a durable SQL outbox.
+- PDF, image, text, CSV and exported email ingestion; Document AI OCR for scans; private original-file storage. Connectors can submit documents automatically.
+- Approved company policy indexing and retrieval through Vertex AI Search, including delayed-index readiness handling.
+- Finance, security and legal Gemini specialists, followed by a resolution agent. Versioned repository skills supply their instructions.
+- Deterministic policy authorization, source ancestry/content deduplication, connector attestations, expiring decisions and automatic invalidation/reassessment.
+- Real Vertex prediction endpoint integration; optional baseline training on your adjudicated BigQuery data. No endpoint means no invented prediction.
+- Real BigQuery assessment analytics, persisted server-sent events, streamed bounded explanations, JSON evidence reports and an audit ledger.
+- Version-bound action requests and authenticated receipts for your ERP/payment connector. An application decision alone never claims a payment was held or released.
+- Responsive operations, evidence, policy, analytics, connection and audit screens; keyboard dialogs and empty/error states.
 
-## Runtime choices
+All seeded business data, synthetic runtime responses, local database fallbacks, old chat UI and Cloudflare deployment components were removed. Test fixtures exist only under `tests/`.
 
-| Runtime | Frontend | Backend | Persistence | Status |
-|---|---|---|---|---|
-| Hosted Site | React / TypeScript / Next-compatible Vinext / Tailwind / React Flow / Recharts | TypeScript Worker REST + SSE | Cloudflare D1 | Working demo |
-| Portable local | Standard Next.js, same React UI | Python FastAPI + shared Node tool engine | SQLite; PostgreSQL optional | API integration-tested |
-| Google Cloud | Deploy Next.js separately | FastAPI / Google ADK advisory reasoning | PostgreSQL required | Adapter code + setup; unconfigured |
+## Google Cloud services
 
-Cloudflare Workers cannot run the Python/Google SDK backend. The hosted application therefore uses the same deterministic TypeScript engine directly. The portable FastAPI transport invokes that engine over a JSON subprocess bridge, keeping permission and scenario behavior in one implementation. Node 24 is required alongside Python for this transport.
+| Service | Responsibility |
+|---|---|
+| Gemini on Vertex AI + Google ADK | Bounded specialist assessments, resolution and streaming explanations |
+| Vertex prediction | Organization-trained risk classification |
+| Document AI | Pretrained OCR for financial and non-traditional documents |
+| Vertex AI Search | Organization policy retrieval |
+| Cloud Run | IAP-protected console/API, private worker, migration job |
+| Cloud SQL PostgreSQL | Authoritative records, decisions, versions, durable jobs and audit events |
+| BigQuery | Transaction/risk analytics and adjudicated training labels |
+| Pub/Sub + Cloud Scheduler | Event processing, durable dispatch recovery and action requests |
+| Cloud Storage | Private original evidence, report capsules and model artifacts |
+| IAP, IAM, Secret Manager, Cloud Build, Artifact Registry | Identity, least-privilege runtime access and deployment |
 
-## Quick start: local frontend and FastAPI
+No non-GCP hosted runtime service is required. Google open-source libraries, React, FastAPI, SQLAlchemy and scikit-learn are reused. See [reuse and licenses](docs/OPEN_SOURCE.md).
 
-Prerequisites: Node 24, Python 3.12+, pnpm (or the equivalent package installer).
+## Deploy from Google Cloud Shell
 
-```bash
-pnpm install --frozen-lockfile
-pnpm prepare:multimodal
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -r backend/requirements.txt
-```
+Use a dedicated billing-enabled GCP project with an organization-managed Google identity. Native Cloud Run IAP uses a Google-managed OAuth client; if external Google identities must access it, configure the appropriate custom OAuth client/IAP settings before granting access. The supplied script targets organization-managed access; do not disable IAP to work around identity configuration.
 
-Terminal 1 — explicit synthetic local reviewer identity:
+Install Terraform 1.9 or later and Git. The deployment principal needs permission to enable services, manage the listed resources/IAM grants, run Cloud Build, impersonate deployment service accounts and execute the migration job. In a dedicated prototype project, a project administrator can perform this bootstrap; the runtime uses separate restricted service identities.
 
 ```bash
-TRUESTATE_MODE=demo TRUESTATE_LOCAL_DEMO_AUTH=1 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8080
+git clone https://github.com/Tirumala2824/truestate.git
+cd truestate
+gcloud auth login
+gcloud auth application-default login
+export PROJECT_ID='YOUR_BILLING_ENABLED_PROJECT'
+export REGION='us-central1'
+export GEMINI_MODEL='YOUR_ENABLED_VERTEX_GEMINI_MODEL_ID'
+export REVIEWER_EMAILS='YOUR_ORGANIZATION_GOOGLE_EMAIL'
+# Optional comma-separated Google identities and allowed service accounts:
+export OPERATOR_EMAILS=''
+export SOURCE_CONNECTOR_EMAILS=''
+./scripts/deploy.sh
 ```
 
-Terminal 2 — standard Next.js frontend:
+The script provisions a private Terraform state bucket, managed services and identities; builds the image with Cloud Build; deploys the console, worker and migration job; executes the migration; and prints the actual Cloud Run URL. Terraform displays its resource plan for approval. Resources incur GCP charges; the script does not invent a price estimate or silently destroy resources. SQL and BigQuery deletion protection are enabled. Rerun with the same project/state bucket for updates.
+
+Cloud SQL and application defaults use the selected region. Document AI defaults to `us`, Search to `global`, and BigQuery to `US`; change the foundation variables before initial provisioning if your residency requirements differ. Model availability and quota must be verified for your selected region/model. Cloud SQL public-IP connectivity uses the authenticated Cloud SQL connector, encrypted transport and no authorized IP networks.
+
+## First real workflow
+
+1. Open the deployed URL, sign in through IAP, and select **Connections → Verify access**. Metadata reachability is shown separately from an actual model invocation.
+2. Register your approved company policies in **Evidence** with purpose **Approved company policy**. Search registration is asynchronous; the scheduler checks retrieval readiness.
+3. Use **Import transactions → Download column headers** to get an empty schema. Populate it with your actual records; no sample monetary records are bundled. Account fingerprints should be irreversible identifiers produced by your source system, not raw bank details.
+4. Attach relevant invoices, contracts, approvals and source messages. Alternatively, connect an existing source system using [the authenticated connector contract](docs/CONNECTORS.md).
+5. Imported/changed data automatically enters the worker pipeline. Review current findings, citations, source relationships, prediction availability, decision expiry and receipts in the case drawer.
+6. A reviewer can change the automation policy, with a new version. Defaults do not automatically clear transactions and do not publish external action requests. Set actual currency limits and evidence requirements before enabling the corresponding actions.
+
+The default policy has **no invented monetary thresholds**. `auto_hold` requires an explicitly configured `max_auto_hold_amount` for the transaction's currency. `auto_clear` is false. Enabling `external_actions: publish_requests` still requires your connector to validate and execute each request; it does not connect an unspecified bank or ERP on its own.
+
+## Predictive model
+
+Use your existing compatible Vertex endpoint by setting `VERTEX_PREDICTION_ENDPOINT` to its full resource name and rerunning deployment. Its contract is documented in [MODEL.md](docs/MODEL.md). The included baseline training pipeline requires real labels, independent temporal evaluation, an operator-supplied quality gate and a single training currency. It cannot train from an empty dataset or synthetic examples.
+
+## Development and checks
 
 ```bash
-TRUESTATE_FASTAPI_URL=http://127.0.0.1:8080 pnpm exec next dev frontend --hostname 127.0.0.1 --port 3000
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pytest
+python -m pytest -q tests
+npm ci
+npm run build
+terraform -chdir=infra/foundation init -backend=false
+terraform -chdir=infra/foundation validate
+terraform -chdir=infra/runtime init -backend=false
+terraform -chdir=infra/runtime validate
 ```
 
-Open `http://127.0.0.1:3000`. FastAPI's interactive API documentation is at `http://127.0.0.1:8080/docs`. No paid services or credentials are required for demo mode. The `.env.example` documents configuration; the server reads environment variables, so load them explicitly with your process manager. Windows users can set the same variables in PowerShell before running these commands.
+The application uses ADC and configured GCP resources even during development. There is no auth bypass, test dataset injection, or fake-service mode. Tests explicitly inject isolated adapters and a test-only SQLite store; they do not establish live cloud connectivity. See [validation evidence and remaining gates](docs/VALIDATION.md), [architecture](docs/ARCHITECTURE.md), [security boundaries](docs/SECURITY.md), and [differentiation](docs/DIFFERENTIATION.md).
 
-For the Python API in Docker:
+## Scope and limits
 
-```bash
-docker compose up --build
-```
+The initial workflow covers supplier payments and account-change evidence; it does not automate every financial, legal or security task. It does not execute money movement, make binding legal determinations, or replace an external system's conditional transaction controls. There is no claim of industry-first novelty. Multimodal input here means documents/images plus structured transactions; live microphone/video sessions are not implemented.
 
-This exposes only `127.0.0.1:8080`, persists SQLite in a Docker volume, and explicitly enables local synthetic identity. Run the frontend separately.
-
-## Run the demonstration
-
-1. Ask **Investigate Aster’s suspicious payment**. Watch the real tool activity unfold inside the answer.
-2. Ask **Why was it held?** for a plain-language explanation.
-3. Ask **Show the evidence graph**, then **Show the signed contract**. Sources remain inside this conversation.
-4. Ask **What are the possible explanations?** to inspect competing hypotheses and uncertainty.
-5. Ask **Give me the audit report**. Download PDF or JSON from the inline report card.
-6. Ask **Try a legitimate bank change**, **Run the failed containment scenario**, or **Run the evaluation**.
-
-To review a payment action, ask “Release this payment.” Enter the financial grounds in the inline review form (or reply “Reason: …”), then confirm the exact payment using the result card or conversation. Cancelling, asking why, or switching to an analyst identity never authorizes a release. Agent holds still use the existing deterministic policy.
-
-Conversations and evidence are stored in your authenticated workspace. If a stream is interrupted, refresh saved state. Ask “Recover interrupted investigation” after 65 seconds to mark an unfinished run for human review. “Reset the demo” asks for confirmation and retains prior conversations, archived cases, and audit history.
-
-See `docs/CONVERSATION.md` for the supported prompt patterns and honest demo limits.
-
-## Tests and evaluation
-
-```bash
-node --test tests/engine.test.mjs tests/conversation.test.mjs tests/scope-multimodal.test.mjs
-node tests/extraction-smoke.mjs
-python -m pytest tests/test_api.py -q
-pnpm exec tsc --noEmit
-node scripts/evaluate.mjs
-```
-
-The evaluation script checks the frozen fixture generator against `datasets/synthetic-v1.json`, records its SHA-256, runs the tools, and writes `docs/evaluation-latest.json`. The UI starts without benchmark results; **Run evaluation** executes a new measurement in your workspace.
-
-Hosted build and Worker integration check (Miniflare, no browser required):
-
-```bash
-pnpm run build
-node tests/worker-smoke.mjs
-```
-
-The tiny synthetic set is a functional check, not evidence of production fraud detection accuracy. Supplier-change rules perform as well as the full workflow on its positive/negative labels. The demo's additional contribution is explicit provenance, explainable source selection, controlled execution, failure handling, and auditability. See `docs/EVALUATION.md`.
-
-## Repository map
-
-```text
-app/                    Hosted React interface and Worker API routes
-components/conversation/ Inline chat cards and interactive provenance graph
-lib/truestate/conversation.ts Natural-language routing, context, confirmation
-lib/truestate/scope.ts   Whole-request financial allowlist and rejection policy
-lib/truestate/evidence-input.ts Untrusted document validation and field extraction
-lib/truestate/multimodal-client.ts On-device PDF extraction and image OCR
-app/api/uploads/         Authenticated source upload/download (R2)
-scripts/prepare-multimodal.mjs Self-hosted OCR and PDF asset preparation
-lib/truestate/engine.ts  Fixtures, event sentinel, tools, policy, holds, evaluation
-lib/truestate/store.ts   D1 compare-and-swap persistence and audit writes
-db/ + drizzle/          Hosted schema and immutable audit migration
-frontend/               Standard Next.js shell for the FastAPI transport
-backend/main.py         FastAPI REST, SSE, Pub/Sub receiver, authorization
-backend/bridge.mjs      JSON bridge into the shared deterministic engine
-backend/models.py       Normalized SQLAlchemy domain schema and projection
-backend/repository.py   SQLite/PostgreSQL persistence and optimistic concurrency
-backend/adk_agents.py   Six optional real ADK agents; advisory, no action authority
-backend/cloud.py        Google Cloud SDK adapters, explicit health states
-backend/migrations/     Initial SQLite/PostgreSQL schema snapshots
-datasets/               Frozen 120-case synthetic evaluation set
-tests/                  Core, API/security, and built Worker integration tests
-docs/                   Architecture, cloud setup, API, limitations, demo script
-Dockerfile* + compose   Portable demo and optional Cloud Run container recipes
-.env.example            Configuration names, no credentials
-```
-
-## Security boundary and limits
-
-Demo queue accounts and funds are fictional. Uploaded source files are user-supplied, explicitly unverified, and cannot authorize payment actions. No connector can transfer funds or modify a real bank account. The hosted Site gives each authenticated visitor a separate synthetic workspace with a demo-reviewer role; it is not an enterprise role-management implementation. FastAPI roles are configured server-side by bearer-token mapping. Never expose local demo authentication on a public host.
-
-Risk reasoning and action authority are separate. The demo policy permits agent holds only on a case's own queued payment, with evidence and an eligible assessment, up to ₹10,00,000. Releases require reviewer identity, a written justification, and explicit conversational confirmation. Historical signatures are synthetic assertions. The app does not perform real cryptographic signature, account ownership, or supplier telephone verification.
-
-See `docs/SECURITY.md` and `docs/GOOGLE_CLOUD.md` before adapting this prototype to real data. This is an audit-support tool, not a legal compliance certification or a universal fraud solution.
-
-## Multimodal scope and streaming
-
-Attach up to three financial records per message (8 MB each, 10 PDF pages, 18,000 extracted characters). Ask **Review uploaded documents**. Review the extracted Supplier, Invoice, Account and Amount fields and download the original source from the same card. Select a case/payment and ask **Compare uploaded documents with this payment** for a read-only comparison. Use **Use sample invoice** on the welcome screen to prepare a fictional PDF for review. You can also drag files into the composer or use Attach. The folder button opens saved evidence for reuse. Removing a file from a draft does not delete its stored original.
-
-Image analysis is English OCR of financial documents, not general image understanding. PDFs with text use PDF.js; scanned pages use OCR. Extraction runs on the device and its result is explicitly unverified on the server. No extracted document instruction enters the command router. Unknown or unrelated files are rejected when no supported financial fields can be extracted. Unsupported text is rejected rather than sent to a general model. Voice dictation is available only in browsers with a speech-recognition API, may use that browser’s speech service, and requires reviewing/sending the transcript.
-
-The whole text request must match the server's bounded financial grammar. Finite patterns intentionally reject unsupported paraphrases and mixed requests; adding financial keywords does not authorize generic chat. No safety mechanism claims to infer arbitrary image semantics or prove that a supplied document is authentic. Payment authorization remains a separate deterministic gate.
-
-The SSE stream emits `status`, `response`, `delta`, `state`, `done`, and `error` events. These are deterministic application replies and real workflow progress, not invented LLM tokens. Hosted investigation steps are committed before state emission. The UI shows extraction, upload, and workflow progress and retains explicit failure/retry handling.
-
-Validation covers image OCR, PDF extraction, malformed/injected/unrelated uploads, cross-tenant access, adversarial text requests, and initial SSE delivery before investigation completion. Browser/device visual, touch, virtual-keyboard, keyboard-interaction, and microphone QA were unavailable in the build environment; voice support and permission handling must be checked on the target browser.
+The prototype displays the latest 200 transactions/documents and 100 assessments; lineage processing is limited to 100 documents and 24,000 extracted characters per document in model context. Truncated or incomplete evidence blocks automatic clearance. OCR uses Document AI synchronous processing and its processor-specific page limits; split oversized documents or extend to the batch API. The SQL implementation favors correctness with short per-organization locks over high-volume throughput. Add pagination, load testing, observability alerts, data-retention controls and organization-specific evaluation before production rollout.

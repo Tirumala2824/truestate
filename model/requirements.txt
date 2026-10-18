@@ -1,0 +1,6 @@
+scikit-learn==1.7.2
+joblib==1.5.2
+google-cloud-bigquery==3.46.2
+google-cloud-storage==3.17.1
+fastapi==0.141.1
+uvicorn==0.42.0

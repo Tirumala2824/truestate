@@ -1,3 +1,0 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
-export const workspaces = sqliteTable('demo_workspaces', { userId:text('user_id').primaryKey(), data:text('data').notNull(), revision:integer('revision').notNull().default(0), mutation:text('mutation').notNull(), updatedAt:text('updated_at').notNull() });
-export const auditEvents = sqliteTable('audit_events', { id:text('id').primaryKey(), userId:text('user_id').notNull(), caseId:text('case_id'), at:text('at').notNull(), actor:text('actor').notNull(), action:text('action').notNull(), detail:text('detail').notNull(), evidenceIds:text('evidence_ids').notNull() }, t=>[index('audit_user_at').on(t.userId,t.at)]);

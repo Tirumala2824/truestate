@@ -1,0 +1,25 @@
+name: Validate infrastructure
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        root: [infra/foundation, infra/runtime]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      - run: terraform init -backend=false -input=false
+        working-directory: ${{ matrix.root }}
+      - run: terraform validate -no-color
+        working-directory: ${{ matrix.root }}
