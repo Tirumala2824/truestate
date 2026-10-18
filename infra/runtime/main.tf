@@ -27,7 +27,7 @@ variable "gemini_model" {
   type = string
 }
 
-variable "reoperator_emails" {
+variable "reviewer_emails" {
   type = list(string)
 }
 
@@ -56,85 +56,24 @@ provider "google" {
   region  = var.foundation.region
 }
 
-locals {
+variable "release_sha" { type = string }
+variable "seed_organization_id" { type = string }
 
-  worker_audience = "https://truestate.internal/${var.foundation.project_id}/worker"
-  environment = {
-
-    GOOGLE_CLOUD_PROJECT      = var.foundation.project_id, GOOGLE_CLOUD_LOCATION = var.foundation.region,
-    GOOGLE_GENAI_USE_VERTEXAI = "true", GOOGLE_GENAI_USE_ENTERPRISE = "true", GEMINI_MODEL = var.gemini_model,
-    ORGANIZATION_ID           = var.organization_id, INSTANCE_CONNECTION_NAME = var.foundation.sql_instance,
-    DB_IAM_USER               = var.foundation.sql_user, DB_NAME = var.foundation.sql_database,
-    EVIDENCE_BUCKET           = var.foundation.evidence_bucket, DOCUMENT_AI_PROCESSOR = var.foundation.document_processor,
-    DOCUMENT_AI_LOCATION      = var.foundation.document_location, SEARCH_DATA_STORE = var.foundation.search_data_store,
-    SEARCH_LOCATION           = var.foundation.search_location, BIGQUERY_DATASET = var.foundation.bigquery_dataset,
-    BIGQUERY_LOCATION         = var.foundation.bigquery_location, EVENT_TOPIC = var.foundation.event_topic,
-    ACTION_TOPIC              = var.foundation.action_topic, VERTEX_PREDICTION_ENDPOINT = var.prediction_endpoint,
-    IAP_AUDIENCE              = "/projects/${var.foundation.project_number}/locations/${var.foundation.region}/services/truestate",
-    WORKER_AUDIENCE           = local.worker_audience, WORKER_CALLER_EMAIL = var.foundation.push_email,
-    REOPERATOR_EMAILS         = join(",", var.reoperator_emails), SOURCE_CONNECTOR_EMAILS = join(",", var.source_connector_emails)
-
-  }
-
-
+module "environment" {
+  source                  = "../modules/environment"
+  foundation              = var.foundation
+  gemini_model            = var.gemini_model
+  reviewer_emails         = var.reviewer_emails
+  source_connector_emails = var.source_connector_emails
+  prediction_endpoint     = var.prediction_endpoint
+  organization_id         = var.organization_id
+  release_sha             = var.release_sha
+  seed_organization_id    = var.seed_organization_id
 }
 
-resource "google_cloud_run_v2_job" "migrate" {
-
-  name                = "truestate-migrate"
-  location            = var.foundation.region
-  deletion_protection = false
-  template {
-
-    template {
-
-      service_account = var.foundation.migration_email
-      timeout         = "600s"
-      max_retries     = 1
-      containers {
-
-        image   = var.image
-        command = ["python", "-m", "backend.migrate"]
-        dynamic "env" {
-
-          for_each = merge(local.environment, {
-            MIGRATION_DB_USER = var.foundation.migration_user
-            }
-          )
-          content {
-            name  = env.key
-            value = env.value
-          }
-
-
-        }
-
-        env {
-
-          name = "MIGRATION_DB_PASSWORD"
-          value_source {
-            secret_key_ref {
-
-              secret  = var.foundation.migration_secret
-              version = "latest"
-
-            }
-
-          }
-
-
-        }
-
-
-      }
-
-
-    }
-
-
-  }
-
-
+locals {
+  worker_audience = "https://truestate.internal/${var.foundation.project_id}/worker"
+  environment     = module.environment.values
 }
 
 resource "google_cloud_run_v2_service" "app" {
@@ -181,7 +120,7 @@ resource "google_cloud_run_v2_service" "app" {
       startup_probe {
 
         http_get {
-          path = "/healthz"
+          path = "/readyz"
         }
 
         period_seconds    = 10
@@ -242,7 +181,7 @@ resource "google_cloud_run_v2_service" "worker" {
       startup_probe {
 
         http_get {
-          path = "/healthz"
+          path = "/readyz"
         }
 
         period_seconds    = 10
@@ -270,7 +209,7 @@ resource "google_cloud_run_v2_service_iam_member" "iap" {
 
 resource "google_iap_web_cloud_run_service_iam_member" "users" {
 
-  for_each               = toset(concat(var.reoperator_emails, var.operator_emails))
+  for_each               = toset(concat(var.reviewer_emails, var.operator_emails))
   project                = var.foundation.project_id
   location               = var.foundation.region
   cloud_run_service_name = google_cloud_run_v2_service.app.name
@@ -402,9 +341,6 @@ output "worker_url" {
   value = google_cloud_run_v2_service.worker.uri
 }
 
-output "migration_job" {
-  value = google_cloud_run_v2_job.migrate.name
-}
 
 resource "google_pubsub_subscription_iam_member" "action_consumers" {
   for_each     = toset(var.source_connector_emails)

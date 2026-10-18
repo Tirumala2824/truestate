@@ -1,52 +1,75 @@
 #!/usr/bin/env bash
+# Each release gate must succeed before the application/worker Terraform apply.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-: "${PROJECT_ID:?Set PROJECT_ID to your billing-enabled GCP project}"
-: "${GEMINI_MODEL:?Set GEMINI_MODEL to an enabled model in your project}"
-: "${REOPERATOR_EMAILS:?Set REOPERATOR_EMAILS to a comma-separated list of Google identities}"
+python3 scripts/deploy-config.py
 REGION="${REGION:-us-central1}"
 TF_STATE_BUCKET="${TF_STATE_BUCKET:-${PROJECT_ID}-truestate-tfstate}"
-export PROJECT_ID GEMINI_MODEL REOPERATOR_EMAILS REGION
+RELEASE_SHA="$(git rev-parse HEAD)"
+export PROJECT_ID REGION RELEASE_SHA
 command -v gcloud >/dev/null
 command -v terraform >/dev/null
-command -v python3 >/dev/null
 gcloud auth print-access-token >/dev/null
+release_tmp="$(mktemp -d)"
+trap 'rm -rf "$release_tmp"' EXIT
+export TRUESTATE_DEPLOY_TMP="$release_tmp"
+
+apply_root() {
+  local root="$1" vars="$2" prefix="$3"
+  terraform -chdir="$root" init -input=false -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="prefix=${prefix}"
+  terraform -chdir="$root" validate -no-color
+  terraform -chdir="$root" plan -input=false -lock-timeout=300s -var-file="$vars" -out="$release_tmp/${prefix}.tfplan"
+  terraform -chdir="$root" apply -input=false -auto-approve "$release_tmp/${prefix}.tfplan"
+}
+
 gcloud services enable serviceusage.googleapis.com cloudresourcemanager.googleapis.com storage.googleapis.com iam.googleapis.com --project "$PROJECT_ID"
 if ! gcloud storage buckets describe "gs://${TF_STATE_BUCKET}" --project "$PROJECT_ID" >/dev/null 2>&1; then
   gcloud storage buckets create "gs://${TF_STATE_BUCKET}" --project "$PROJECT_ID" --location "$REGION" --uniform-bucket-level-access --public-access-prevention
 fi
 gcloud storage buckets update "gs://${TF_STATE_BUCKET}" --versioning
-terraform -chdir=infra/foundation init -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="prefix=foundation"
-terraform -chdir=infra/foundation validate
-terraform -chdir=infra/foundation apply -var="project_id=${PROJECT_ID}" -var="region=${REGION}"
-deploy_tmp="$(mktemp -d)"
-trap 'rm -rf "$deploy_tmp"' EXIT
-terraform -chdir=infra/foundation output -json configuration > "$deploy_tmp/foundation.json"
-export TRUESTATE_DEPLOY_TMP="$deploy_tmp"
+python3 scripts/deploy-config.py "$release_tmp"
+apply_root infra/foundation "$release_tmp/foundation.tfvars.json" foundation
+terraform -chdir=infra/foundation output -json configuration > "$release_tmp/foundation.json"
 build_identity="$(python3 -c 'import json,os; print(json.load(open(os.environ["TRUESTATE_DEPLOY_TMP"]+"/foundation.json"))["build_email"])')"
 build_bucket="$(python3 -c 'import json,os; print(json.load(open(os.environ["TRUESTATE_DEPLOY_TMP"]+"/foundation.json"))["build_bucket"])')"
-image_tag="$(git rev-parse --short=12 HEAD)-$(date -u +%Y%m%d%H%M%S)"
-export TRUESTATE_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/truestate/application:${image_tag}"
-gcloud builds submit . --project "$PROJECT_ID" --region "$REGION" --tag "$TRUESTATE_IMAGE" \
+image_repository="${REGION}-docker.pkg.dev/${PROJECT_ID}/truestate/application"
+build_id="$(gcloud builds submit . --project "$PROJECT_ID" --region "$REGION" --async --format='value(id)' \
+  --timeout=1800s --tag "${image_repository}:${RELEASE_SHA}" \
   --service-account "projects/${PROJECT_ID}/serviceAccounts/${build_identity}" \
-  --gcs-source-staging-dir "gs://${build_bucket}/source" --gcs-log-dir "gs://${build_bucket}/logs"
+  --gcs-source-staging-dir "gs://${build_bucket}/source" --gcs-log-dir "gs://${build_bucket}/logs")"
+gcloud builds log "$build_id" --project "$PROJECT_ID" --region "$REGION" --stream
+build_status="$(gcloud builds describe "$build_id" --project "$PROJECT_ID" --region "$REGION" --format='value(status)')"
+if [[ "$build_status" != SUCCESS ]]; then
+  printf '%s\n' "Cloud Build did not succeed: ${build_status}" >&2
+  exit 1
+fi
+image_digest="$(gcloud builds describe "$build_id" --project "$PROJECT_ID" --region "$REGION" --format='value(results.images[0].digest)')"
+if [[ ! "$image_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+  printf '%s\n' 'Cloud Build returned no immutable image digest.' >&2
+  exit 1
+fi
+export TRUESTATE_IMAGE="${image_repository}@${image_digest}"
 gcloud beta services identity create --service=iap.googleapis.com --project "$PROJECT_ID"
 gcloud beta services identity create --service=pubsub.googleapis.com --project "$PROJECT_ID"
-python3 - <<'PY'
-import json,os
-from pathlib import Path
-p=Path(os.environ['TRUESTATE_DEPLOY_TMP'])
-split=lambda k:[v.strip() for v in os.getenv(k,'').split(',') if v.strip()]
-config={'foundation':json.loads((p/'foundation.json').read_text()),'image':os.environ['TRUESTATE_IMAGE'],
- 'gemini_model':os.environ['GEMINI_MODEL'],'reoperator_emails':split('REOPERATOR_EMAILS'),
- 'operator_emails':split('OPERATOR_EMAILS'),'source_connector_emails':split('SOURCE_CONNECTOR_EMAILS'),
- 'prediction_endpoint':os.getenv('VERTEX_PREDICTION_ENDPOINT',''),
- 'organization_id':os.getenv('ORGANIZATION_ID','default')}
-(p/'runtime.tfvars.json').write_text(json.dumps(config))
-PY
-terraform -chdir=infra/runtime init -backend-config="bucket=${TF_STATE_BUCKET}" -backend-config="prefix=runtime"
-terraform -chdir=infra/runtime validate
-terraform -chdir=infra/runtime apply -var-file="$deploy_tmp/runtime.tfvars.json"
-gcloud run jobs execute truestate-migrate --project "$PROJECT_ID" --region "$REGION" --wait
-terraform -chdir=infra/runtime output app_url
-printf '%s\n' 'Cloud Run deployment and schema migration completed. Open the URL and run connection verification.'
+python3 scripts/deploy-config.py "$release_tmp"
+apply_root infra/jobs "$release_tmp/jobs.tfvars.json" jobs
+# Managed backup and PITR are both available before the first migration runs.
+gcloud sql backups create --instance truestate-postgres --project "$PROJECT_ID" --description "Before release ${RELEASE_SHA}" --quiet
+# --wait propagates a failed job execution. Never deploy services after a failed gate.
+gcloud run jobs execute truestate-release-migrate --project "$PROJECT_ID" --region "$REGION" --wait
+gcloud run jobs execute truestate-seed --project "$PROJECT_ID" --region "$REGION" --wait
+gcloud run jobs execute truestate-release-verify --project "$PROJECT_ID" --region "$REGION" --wait
+apply_root infra/runtime "$release_tmp/runtime.tfvars.json" runtime
+app_url="$(terraform -chdir=infra/runtime output -raw app_url)"
+printf '%s\n' "Release ${RELEASE_SHA} deployed: ${app_url}"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+  {
+    printf '## GCP deployment completed\n\n'
+    printf -- '- Release: `%s`\n' "$RELEASE_SHA"
+    printf -- '- Application: [%s](%s)\n' "$app_url" "$app_url"
+    printf -- '- Alembic migration: passed\n- Synthetic transactions: **2,000,000 verified**\n'
+    printf -- '- Runtime IAM, Gemini, Document AI, Search, BigQuery, private storage and Pub/Sub permission checks: passed\n'
+    printf -- '- App and worker startup readiness: passed\n'
+    printf '\nSign in with a configured Google identity. Human IAP login, connector execution and model quality still require acceptance testing.\n'
+  } >> "$GITHUB_STEP_SUMMARY"
+fi

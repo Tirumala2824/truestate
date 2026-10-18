@@ -1,17 +1,18 @@
-name: Validate infrastructure
+name: Validate source and infrastructure
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
   terraform:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       matrix:
-        root: [infra/foundation, infra/runtime]
+        root: [infra/foundation, infra/jobs, infra/runtime]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
@@ -23,3 +24,36 @@ jobs:
         working-directory: ${{ matrix.root }}
       - run: terraform validate -no-color
         working-directory: ${{ matrix.root }}
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: truestate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+pg8000://postgres:postgres@127.0.0.1:5432/truestate_test
+      RUN_SCALE_TEST: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q -s tests
+      - run: alembic upgrade head --sql > /tmp/migration.sql
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:frontend && npm run build
+      - run: bash -n scripts/deploy.sh scripts/bootstrap-gcp.sh

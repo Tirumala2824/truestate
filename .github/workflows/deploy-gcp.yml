@@ -1,0 +1,75 @@
+name: Deploy GCP
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: truestate-gcp-release
+  cancel-in-progress: false
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.DEPLOY_ENABLED == 'true')
+    uses: ./.github/workflows/validate.yml
+  deploy:
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: gcp
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+      REVIEWER_EMAILS: ${{ vars.REVIEWER_EMAILS }}
+      OPERATOR_EMAILS: ${{ vars.OPERATOR_EMAILS }}
+      SOURCE_CONNECTOR_EMAILS: ${{ vars.SOURCE_CONNECTOR_EMAILS }}
+      ORGANIZATION_ID: ${{ vars.ORGANIZATION_ID || 'synthetic-demo' }}
+      SEED_ORGANIZATION_ID: ${{ vars.SEED_ORGANIZATION_ID || 'synthetic-demo' }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      DOCUMENT_AI_LOCATION: ${{ vars.DOCUMENT_AI_LOCATION || 'us' }}
+      SEARCH_LOCATION: ${{ vars.SEARCH_LOCATION || 'global' }}
+      BIGQUERY_LOCATION: ${{ vars.BIGQUERY_LOCATION || 'US' }}
+      SQL_TIER: ${{ vars.SQL_TIER || 'db-custom-2-7680' }}
+      SQL_DISK_SIZE_GB: ${{ vars.SQL_DISK_SIZE_GB || '50' }}
+      VERTEX_PREDICTION_ENDPOINT: ${{ vars.VERTEX_PREDICTION_ENDPOINT }}
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate deployment configuration
+        env:
+          WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          HAS_KEY_SECRET: ${{ secrets.GCP_CREDENTIALS_JSON != '' }}
+        run: |
+          python3 scripts/deploy-config.py
+          if [[ -n "$WIF_PROVIDER" ]]; then
+            test -n "$WIF_SERVICE_ACCOUNT" || { echo 'Set GCP_SERVICE_ACCOUNT for Workload Identity Federation.'; exit 1; }
+          elif [[ "$HAS_KEY_SECRET" != 'true' ]]; then
+            echo 'Configure GCP_WORKLOAD_IDENTITY_PROVIDER + GCP_SERVICE_ACCOUNT, or the GCP_CREDENTIALS_JSON repository secret.'
+            exit 1
+          fi
+      - name: Authenticate with Workload Identity Federation
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != ''
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - name: Authenticate with supplied service-account secret
+        if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER == ''
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.13.5
+          terraform_wrapper: false
+      - name: Provision, build, migrate, seed, verify, and release
+        run: ./scripts/deploy.sh

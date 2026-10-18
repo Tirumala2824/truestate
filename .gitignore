@@ -14,3 +14,7 @@ __pycache__/
 *.tfvars.json
 *.db
 coverage/
+
+# Temporary GitHub OIDC/service-account credentials must never enter source or builds.
+gha-creds-*.json
+**/gha-creds-*.json

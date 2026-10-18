@@ -4,10 +4,10 @@ export type Workspace = {
   user: { email: string; reviewer: boolean };
   transactions: RecordData[]; documents: RecordData[]; decisions: RecordData[];
   runs: RecordData[]; jobs: RecordData[]; knowledge: RecordData[]; receipts: RecordData[];
-  policy: RecordData | null; configuration: RecordData; limits: RecordData;
+  synthetic_dataset?: RecordData | null; policy: RecordData | null; configuration: RecordData; limits: RecordData;
 };
 export const pageNames: Record<Page, string> = { overview: 'Overview', queue: 'Work queue', agents: 'Agents', evidence: 'Evidence', policies: 'Policies', analytics: 'Analytics', audit: 'Audit trail', connections: 'Connections' };
-export const statusNames: Record<string, string> = { ready: 'Ready', hold: 'On hold', needs_evidence: 'Evidence needed', review: 'Needs review', stale: 'Reassessment needed', queued: 'Queued', running: 'In progress', failed: 'Failed', processed: 'Processed', not_configured: 'Not configured', configured_not_invoked: 'Configured', reachable: 'Verified', error: 'Connection error', submitted: 'Indexing', searchable: 'Searchable', executed: 'Executed', rejected: 'Rejected', unknown: 'Inconclusive' };
+export const statusNames: Record<string, string> = { not_assessed: 'Not assessed', ready: 'Ready', hold: 'On hold', needs_evidence: 'Evidence needed', review: 'Needs review', stale: 'Reassessment needed', queued: 'Queued', running: 'In progress', failed: 'Failed', processed: 'Processed', not_configured: 'Not configured', configured_not_invoked: 'Configured', reachable: 'Verified', error: 'Connection error', submitted: 'Indexing', searchable: 'Searchable', executed: 'Executed', rejected: 'Rejected', unknown: 'Inconclusive' };
 export function title(value: string) { return statusNames[value] || value.replaceAll('_', ' ').replaceAll('.', ' ').replace(/^./, c => c.toUpperCase()); }
 export function caseStatus(tx: RecordData, workspace: Workspace | null, now = Date.now()): string {
   const decision = workspace?.decisions.find(d => d.id === tx.id);
@@ -16,7 +16,7 @@ export function caseStatus(tx: RecordData, workspace: Workspace | null, now = Da
     return decision.invalidated_at || !Number.isFinite(expiry) || expiry <= now ? 'stale' : decision.disposition;
   }
   const job = workspace?.jobs.find(j => j.target === tx.id && j.kind === 'investigate');
-  return job?.status === 'failed' ? 'failed' : job?.status === 'running' ? 'running' : 'queued';
+  return job?.status === 'failed' ? 'failed' : job?.status === 'running' ? 'running' : job ? 'queued' : tx.synthetic ? 'not_assessed' : 'queued';
 }
 export const needsAttention = (status: string) => ['review', 'needs_evidence', 'stale', 'failed'].includes(status);
 export function money(value: string | number, currency = 'USD') {

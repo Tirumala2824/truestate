@@ -85,6 +85,15 @@ def create_app(config=None, store=None, cloud=None, team=None):
     def health():
         return {'status': 'process_running', 'configured': not bool(app.state.config.missing())}
 
+    @app.get('/readyz')
+    def readiness():
+        from .release_check import ready
+        try:
+            return ready(database().engine)
+        except Exception:
+            log.exception('Release readiness check failed')
+            raise HTTPException(503, 'Database schema or required dataset is not ready.')
+
     @app.get('/api/workspace')
     def workspace(p: Principal = Depends(user)):
         db = database()
@@ -95,6 +104,7 @@ def create_app(config=None, store=None, cloud=None, team=None):
                 'documents': documents, 'decisions': db.list('decision'), 'runs': runs,
                 'jobs': db.jobs(), 'policy': db.get('configuration', 'automation_policy'),
                 'knowledge': db.list('knowledge'), 'receipts': db.list('receipt'),
+                'synthetic_dataset': db.synthetic_dataset(),
                 'configuration': {'missing': app.state.config.missing(), 'model': app.state.config.gemini_model,
                     'prediction_configured': bool(app.state.config.prediction_endpoint)},
                 'limits': {'transactions_displayed': 200, 'documents_displayed': 200, 'runs_displayed': 100}}
@@ -256,6 +266,8 @@ def create_app(config=None, store=None, cloud=None, team=None):
     @app.post('/api/policy')
     async def update_policy(body: PolicyUpdate, p: Principal = Depends(user)):
         reviewer(p)
+        if database().org.startswith('synthetic-') and body.policy.external_actions != 'disabled':
+            raise HTTPException(422, 'External action requests are blocked for synthetic workspaces.')
         current = get_record('configuration', 'automation_policy')
         if body.policy.version == current['policy']['version']:
             raise HTTPException(422, 'Use a new policy version when changing automation rules.')

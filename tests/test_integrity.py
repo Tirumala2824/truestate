@@ -134,3 +134,16 @@ def test_document_and_outbox_rollback_together(store, transaction):
         store.add_document('new-doc', document('new-doc', 'new'), stale, 'test')
     assert store.get('document', 'new-doc') is None
     assert not any(j['kind'] == 'document' for j in store.jobs())
+
+
+def test_synthetic_organization_cannot_publish_external_requests(store, transaction):
+    from backend.store import Store
+    synthetic = Store(store.engine, 'synthetic-test')
+    from backend.domain import AutomationPolicy
+    synthetic.put('configuration', 'automation_policy', {'policy': AutomationPolicy(version='test', external_actions='publish_requests').model_dump(mode='json')})
+    synthetic.ingest([transaction], 'synthetic-event', 'test')
+    bound_hash, versions, policy = synthetic.bound_state(transaction['id'])
+    value = {'disposition': 'ready', 'snapshot_hash': bound_hash, 'expires_at': '2099-01-01T00:00:00Z'}
+    synthetic.save_decision(transaction['id'], value, versions, publish=True)
+    assert synthetic.list('action_request') == []
+    assert not any(job['kind'] == 'action' for job in synthetic.jobs())

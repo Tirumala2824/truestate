@@ -70,3 +70,7 @@ test('case status never presents expired, invalidated or unparseable authorizati
   assert.equal(caseStatus(tx, workspace, now), 'running');
   assert.equal(caseStatus(tx, null, now), 'queued');
 });
+
+test('seeded transactions without an actual assessment job are not shown as running', () => {
+  assert.equal(caseStatus({ id: 'syn-v1-0000000001', synthetic: true }, { decisions: [], jobs: [] }), 'not_assessed');
+});

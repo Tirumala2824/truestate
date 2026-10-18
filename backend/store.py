@@ -3,7 +3,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import timedelta, timezone
 from sqlalchemy import (Column, String, Integer, DateTime, JSON, Text, Boolean,
-                        UniqueConstraint, create_engine, select, func, text)
+                        UniqueConstraint, Index, create_engine, select, func, text)
 from sqlalchemy.orm import declarative_base, sessionmaker
 from .domain import utcnow, digest, snapshot, AutomationPolicy, decision_current
 
@@ -54,6 +54,23 @@ class Inbox(Base):
     hash = Column(String(64), nullable=False)
 
 
+class SyntheticLoad(Base):
+    __tablename__ = 'synthetic_loads'
+    org = Column(String(100), primary_key=True)
+    dataset_id = Column(String(40), primary_key=True)
+    expected_rows = Column(Integer, nullable=False)
+    completed_rows = Column(Integer, nullable=False)
+    verified_rows = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    verified_at = Column(DateTime(timezone=True))
+
+
+Index('ix_records_org_kind_updated', Record.org, Record.kind, Record.updated_at.desc(), Record.id.desc())
+Index('ix_events_org_seq', Event.org, Event.seq)
+Index('ix_jobs_org_status_dispatched', Job.org, Job.status, Job.dispatched)
+
+
 class Conflict(Exception):
     pass
 
@@ -87,7 +104,7 @@ class Store:
     def list(self, kind, limit=200):
         with self.session() as s:
             rows = s.scalars(select(Record).where(Record.org == self.org, Record.kind == kind)
-                             .order_by(Record.updated_at.desc()).limit(limit))
+                             .order_by(Record.updated_at.desc(), Record.id.desc()).limit(limit))
             return [self._data(row) for row in rows]
 
     def add_document(self, doc_id, data, transaction, actor):
@@ -140,7 +157,9 @@ class Store:
                 raise KeyError('Unknown action request')
             current_hash, _, policy = self._bound_state(s, req['transaction_id'])
             decision = self._data(self._row(s, 'decision', req['transaction_id']))
-            authorized = bool(decision and not self._row(s, 'receipt', request_id) and policy.external_actions == 'publish_requests' and
+            transaction = self._data(self._row(s, 'transaction', req['transaction_id']))
+            synthetic = self.org.startswith('synthetic-') or bool(transaction and transaction.get('synthetic'))
+            authorized = bool(not synthetic and decision and not self._row(s, 'receipt', request_id) and policy.external_actions == 'publish_requests' and
                 req['status'] in {'queued', 'published'} and decision['version'] == req['decision_version'] and
                 decision_current(decision, current_hash) and current_hash == req['snapshot_hash'] and
                 decision['disposition'] == req['disposition'] and decision['disposition'] in {'ready', 'hold'})
@@ -255,8 +274,13 @@ class Store:
                     seen.add(key)
                     pending.extend(docs.get(key, {}).get('parent_ids', []))
             return False
-        return [t['id'] for t in self.list('transaction', None)
-                if doc_id is None or includes(t.get('document_ids', []))]
+        with self.session() as s:
+            query = select(Record).where(Record.org == self.org, Record.kind == 'transaction')
+            if self.org.startswith('synthetic-'):
+                assessed = select(Record.id).where(Record.org == self.org, Record.kind == 'decision').correlate(None)
+                query = query.where(Record.id.in_(assessed))
+            return [t.id for t in s.scalars(query)
+                    if doc_id is None or includes(t.data.get('document_ids', []))]
 
     def invalidate(self, target, reason):
         with self.session() as s:
@@ -311,6 +335,17 @@ class Store:
             if job and job.org == self.org:
                 job.dispatched = True
 
+    def synthetic_dataset(self):
+        if not self.org.startswith('synthetic-'):
+            return None
+        with self.session() as s:
+            row = s.get(SyntheticLoad, (self.org, 'transactions-v1'))
+            return {'synthetic': True, 'organization': self.org, 'dataset_id': 'transactions-v1',
+                    'status': row.status if row else 'not_loaded',
+                    'verified_rows': row.verified_rows if row else 0,
+                    'expected_rows': row.expected_rows if row else 0,
+                    'external_actions': 'blocked'}
+
     def jobs(self, limit=100):
         with self.session() as s:
             return [{'id': j.id, 'kind': j.kind, 'target': j.target, 'status': j.status,
@@ -331,7 +366,9 @@ class Store:
             decision = self._put(s, 'decision', target, value, expected_decision)
             if report:
                 self._put(s, 'run', report['run_id'], report)
-            if publish and value['disposition'] in {'ready', 'hold'}:
+            transaction = self._data(self._row(s, 'transaction', target))
+            synthetic = self.org.startswith('synthetic-') or bool(transaction and transaction.get('synthetic'))
+            if publish and not synthetic and value['disposition'] in {'ready', 'hold'}:
                 request_id = str(uuid.uuid4())
                 self._put(s, 'action_request', request_id, {'transaction_id': target,
                     'snapshot_hash': value['snapshot_hash'], 'decision_version': decision.version,

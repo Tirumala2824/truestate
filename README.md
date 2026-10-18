@@ -16,7 +16,7 @@ A GCP-backed operations console for supplier-payment and vendor-change reviews a
 - Version-bound action requests and authenticated receipts for your ERP/payment connector. An application decision alone never claims a payment was held or released.
 - Responsive operations, evidence, policy, analytics, connection and audit screens; keyboard dialogs and empty/error states.
 
-All seeded business data, synthetic runtime responses, local database fallbacks, old chat UI and Cloudflare deployment components were removed. Test fixtures exist only under `tests/`.
+Synthetic cloud responses, local database fallbacks, the old chat UI and Cloudflare deployment components remain removed. An explicitly requested PostgreSQL seed job now creates 2,000,000 clearly labelled transactions in a reserved synthetic workspace. It does not fabricate documents, model findings, receipts or real business outcomes. Small test fixtures remain under `tests/`.
 
 ## Google Cloud services
 
@@ -35,6 +35,10 @@ All seeded business data, synthetic runtime responses, local database fallbacks,
 
 No non-GCP hosted runtime service is required. Google open-source libraries, React, FastAPI, SQLAlchemy and scikit-learn are reused. See [reuse and licenses](docs/OPEN_SOURCE.md).
 
+## Deploy from GitHub (recommended)
+
+Follow [GitHub deployment setup](docs/GITHUB_DEPLOYMENT.md) for the exact variables and authentication settings. Run **Actions → Deploy GCP** after configuring them. The pipeline provisions GCP, backs up Cloud SQL, runs Alembic migrations, seeds and verifies 2,000,000 transactions, checks live services and only then deploys the app/worker. See [Alembic migration operations](docs/MIGRATIONS.md).
+
 ## Deploy from Google Cloud Shell
 
 Use a dedicated billing-enabled GCP project with an organization-managed Google identity. Native Cloud Run IAP uses a Google-managed OAuth client; if external Google identities must access it, configure the appropriate custom OAuth client/IAP settings before granting access. The supplied script targets organization-managed access; do not disable IAP to work around identity configuration.
@@ -50,13 +54,15 @@ export PROJECT_ID='YOUR_BILLING_ENABLED_PROJECT'
 export REGION='us-central1'
 export GEMINI_MODEL='YOUR_ENABLED_VERTEX_GEMINI_MODEL_ID'
 export REVIEWER_EMAILS='YOUR_ORGANIZATION_GOOGLE_EMAIL'
+export ORGANIZATION_ID='synthetic-demo'
+export SEED_ORGANIZATION_ID='synthetic-demo'
 # Optional comma-separated Google identities and allowed service accounts:
 export OPERATOR_EMAILS=''
 export SOURCE_CONNECTOR_EMAILS=''
 ./scripts/deploy.sh
 ```
 
-The script provisions a private Terraform state bucket, managed services and identities; builds the image with Cloud Build; deploys the console, worker and migration job; executes the migration; and prints the actual Cloud Run URL. Terraform displays its resource plan for approval. Resources incur GCP charges; the script does not invent a price estimate or silently destroy resources. SQL and BigQuery deletion protection are enabled. Rerun with the same project/state bucket for updates.
+The script provisions a private Terraform state bucket, managed services and identities; builds an immutable image with Cloud Build; deploys the release jobs; backs up Cloud SQL; executes Alembic, bulk seeding and service verification; and finally deploys the console and worker. It prints the actual Cloud Run URL after completion. Terraform prints and automatically applies saved plans as part of this authorized release pipeline. Resources incur GCP charges; the script does not invent a price estimate or silently destroy resources. SQL and BigQuery deletion protection are enabled. Rerun with the same project/state bucket for updates.
 
 Cloud SQL and application defaults use the selected region. Document AI defaults to `us`, Search to `global`, and BigQuery to `US`; change the foundation variables before initial provisioning if your residency requirements differ. Model availability and quota must be verified for your selected region/model. Cloud SQL public-IP connectivity uses the authenticated Cloud SQL connector, encrypted transport and no authorized IP networks.
 
@@ -103,11 +109,13 @@ npm run test:frontend
 npm run build
 terraform -chdir=infra/foundation init -backend=false
 terraform -chdir=infra/foundation validate
+terraform -chdir=infra/jobs init -backend=false
+terraform -chdir=infra/jobs validate
 terraform -chdir=infra/runtime init -backend=false
 terraform -chdir=infra/runtime validate
 ```
 
-The application uses ADC and configured GCP resources even during development. There is no auth bypass, test dataset injection, or fake-service mode. Tests explicitly inject isolated adapters and a test-only SQLite store; they do not establish live cloud connectivity. See [validation evidence and remaining gates](docs/VALIDATION.md), [architecture](docs/ARCHITECTURE.md), [security boundaries](docs/SECURITY.md), and [differentiation](docs/DIFFERENTIATION.md).
+The application uses ADC and configured GCP resources even during development. There is no auth bypass or fake-service mode. The dedicated seed job inserts labelled synthetic transactions into PostgreSQL; it is separate from application startup and never supplies fabricated cloud responses. Tests explicitly inject isolated adapters and a test-only SQLite store; they do not establish live cloud connectivity. See [validation evidence and remaining gates](docs/VALIDATION.md), [architecture](docs/ARCHITECTURE.md), [security boundaries](docs/SECURITY.md), and [differentiation](docs/DIFFERENTIATION.md).
 
 ## Scope and limits
 

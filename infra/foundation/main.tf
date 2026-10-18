@@ -45,6 +45,19 @@ variable "bigquery_location" {
   default = "US"
 }
 
+variable "sql_tier" {
+  type    = string
+  default = "db-custom-2-7680"
+}
+variable "sql_disk_size" {
+  type    = number
+  default = 50
+  validation {
+    condition     = var.sql_disk_size >= 10
+    error_message = "Cloud SQL disk size must be at least 10 GB."
+  }
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
@@ -191,9 +204,9 @@ resource "google_sql_database_instance" "db" {
   deletion_protection = true
   settings {
 
-    tier              = "db-custom-1-3840"
+    tier              = var.sql_tier
     edition           = "ENTERPRISE"
-    disk_size         = 10
+    disk_size         = var.sql_disk_size
     disk_autoresize   = true
     availability_type = "ZONAL"
     database_flags {
