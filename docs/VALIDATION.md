@@ -2,9 +2,10 @@
 
 Checks performed on the v2 source:
 
-- React/TypeScript production build: passed.
+- Redesigned React/TypeScript production build: passed.
+- 6 frontend logic tests: passed. Coverage includes quoted/multiline CSV imports, schema/record validation, split UTF-8 streaming frames and expired/invalidated decision display. These tests do not establish browser layout or interaction correctness.
 - Python module compilation: passed for backend, model and deployment scripts.
-- 15 isolated tests: passed. Coverage includes conservative source deduplication, cycles/missing ancestry, evidence/prediction clearance gates, currency-specific hold limits, atomic ingestion, idempotency conflicts, job leases, policy insert races, snapshot expiry, reviewer compare-and-swap, version-bound requests, immutable receipt semantics, document/outbox rollback, fail-closed API access, scoped input rejection, real ADK graph construction and recovery after a report-storage/analytics boundary failure.
+- 16 isolated backend tests: passed. Coverage includes conservative source deduplication, cycles/missing ancestry, evidence/prediction clearance gates, currency-specific hold limits, atomic ingestion, idempotency conflicts, job leases, policy insert races, snapshot expiry, reviewer compare-and-swap, version-bound requests, immutable receipt semantics, document/outbox rollback, fail-closed API access, scoped input rejection, authenticated extracted-document access with private storage locators omitted, real ADK graph construction and recovery after a report-storage/analytics boundary failure.
 - Application dependency resolution against the pinned requirements: passed; dependencies installed for SDK contract checks.
 - Shell deployment syntax: passed.
 - Terraform formatting and HCL parsing: passed. Provider installation completed with signed HashiCorp packages. An initial cache checksum mismatch was resolved by reinitialization without disabling checksum verification.

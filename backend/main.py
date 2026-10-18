@@ -179,6 +179,11 @@ def create_app(config=None, store=None, cloud=None, team=None):
         return await persist_document(file, 'evidence', transaction_id, parent_ids, Principal(caller),
             {'source_attested': True, 'source_identity': caller, 'origin_reference': origin_reference})
 
+    @app.get('/api/documents/{doc_id}')
+    def document_details(doc_id: str, p: Principal = Depends(user)):
+        doc = get_record('document', doc_id)
+        return {key: value for key, value in doc.items() if key not in {'object', 'uri'}}
+
     @app.get('/api/documents/{doc_id}/source')
     def download_source(doc_id: str, p: Principal = Depends(user)):
         doc = get_record('document', doc_id)

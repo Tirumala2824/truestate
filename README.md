@@ -62,11 +62,11 @@ Cloud SQL and application defaults use the selected region. Document AI defaults
 
 ## First real workflow
 
-1. Open the deployed URL, sign in through IAP, and select **Connections → Verify access**. Metadata reachability is shown separately from an actual model invocation.
+1. Open the deployed URL, sign in through IAP, and select **Connections → Verify service access**. Metadata reachability is shown separately from an actual model invocation.
 2. Register your approved company policies in **Evidence** with purpose **Approved company policy**. Search registration is asynchronous; the scheduler checks retrieval readiness.
-3. Use **Import transactions → Download column headers** to get an empty schema. Populate it with your actual records; no sample monetary records are bundled. Account fingerprints should be irreversible identifiers produced by your source system, not raw bank details.
+3. Use **Import transactions → Get template** to get an empty schema. Populate it with your actual records; no sample monetary records are bundled. Account fingerprints should be irreversible identifiers produced by your source system, not raw bank details.
 4. Attach relevant invoices, contracts, approvals and source messages. Alternatively, connect an existing source system using [the authenticated connector contract](docs/CONNECTORS.md).
-5. Imported/changed data automatically enters the worker pipeline. Review current findings, citations, source relationships, prediction availability, decision expiry and receipts in the case drawer.
+5. Imported/changed data automatically enters the worker pipeline. Review current findings, citations, source relationships, prediction availability, decision expiry and receipts in the full-page case workspace.
 6. A reviewer can change the automation policy, with a new version. Defaults do not automatically clear transactions and do not publish external action requests. Set actual currency limits and evidence requirements before enabling the corresponding actions.
 
 The default policy has **no invented monetary thresholds**. `auto_hold` requires an explicitly configured `max_auto_hold_amount` for the transaction's currency. `auto_clear` is false. Enabling `external_actions: publish_requests` still requires your connector to validate and execute each request; it does not connect an unspecified bank or ERP on its own.
@@ -74,6 +74,21 @@ The default policy has **no invented monetary thresholds**. `auto_hold` requires
 ## Predictive model
 
 Use your existing compatible Vertex endpoint by setting `VERTEX_PREDICTION_ENDPOINT` to its full resource name and rerunning deployment. Its contract is documented in [MODEL.md](docs/MODEL.md). The included baseline training pipeline requires real labels, independent temporal evaluation, an operator-supplied quality gate and a single training currency. It cannot train from an empty dataset or synthetic examples.
+
+## Explore the redesigned frontend locally
+
+The interface uses a light operations workspace, a dark navigation rail, a visual agent workflow, list/board work queues, full-page cases, searchable evidence, guided imports, readable policy controls and responsive layouts. There is no general chat screen.
+
+With Node 22.13 or later, open the repository and run:
+
+```bash
+npm ci
+npm run dev
+```
+
+Open the local URL printed by Vite. You can explore navigation, agent responsibilities, help, workspace search and CSV preparation without a backend. The interface explicitly shows **Setup needed**; business metrics remain unavailable, submissions stay disabled, and no sample records are generated. Viewing real cases, policies and documents requires the deployed, authenticated API.
+
+The development server proxies `/api` to `http://127.0.0.1:8080`. A backend there still requires the documented GCP configuration and authenticated access; frontend inspection does not bypass it. For the live system, use the Cloud Run deployment instructions above.
 
 ## Development and checks
 
@@ -84,6 +99,7 @@ pip install -r requirements.txt
 pip install pytest
 python -m pytest -q tests
 npm ci
+npm run test:frontend
 npm run build
 terraform -chdir=infra/foundation init -backend=false
 terraform -chdir=infra/foundation validate

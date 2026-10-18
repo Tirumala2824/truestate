@@ -42,6 +42,21 @@ def test_reviewer_required_for_configuration(store):
     assert response.status_code == 403
 
 
+def test_document_content_requires_identity_and_hides_storage_locators(store):
+    store.put('document', 'test-doc', {
+        'filename': 'test-only.txt', 'text': 'Extracted fixture content',
+        'parent_ids': [], 'object': 'private/object', 'uri': 'gs://private/object',
+    })
+    path = '/api/documents/test-doc'
+    assert client(store, authenticated=False).get(path).status_code == 401
+    response = client(store).get(path)
+    assert response.status_code == 200
+    assert response.json()['text'] == 'Extracted fixture content'
+    assert 'object' not in response.json()
+    assert 'uri' not in response.json()
+    assert client(store).get('/api/documents/missing').status_code == 404
+
+
 def test_sdk_agent_graph_and_hallucinated_citations():
     root = build_agents('configured-gemini-model')
     assert [a.name for a in root.sub_agents[0].sub_agents] == ['finance', 'security', 'legal']
