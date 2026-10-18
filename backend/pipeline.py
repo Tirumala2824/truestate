@@ -128,6 +128,8 @@ class Pipeline:
             if match['id'] in active:
                 doc = await asyncio.to_thread(store.get, 'document', match['id'])
                 if doc and doc['status'] == 'processed':
+                    if doc.get('truncated') or len(doc['text']) > 24000:
+                        lineage['incomplete_documents'].append(doc['id'])
                     policies.append({'id': doc['id'], 'title': doc['filename'], 'text': doc['text'][:24000]})
         # All active corpus versions are bound, including policies not retrieved for this query.
         versions = [('transaction', tx['id'], tx['version']),

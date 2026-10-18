@@ -44,10 +44,11 @@ class TestTeam:
             'disposition': 'ready', 'disagreements': [], 'summary': 'Test fixture', 'evidence_ids': ['evidence'], 'next_steps': []}
 
 
-def test_pipeline_resumes_committed_report_after_service_failure(store, transaction):
+@pytest.mark.parametrize('truncated_policy', [False, True])
+def test_pipeline_resumes_committed_report_after_service_failure(store, transaction, truncated_policy):
     for key, purpose in [('evidence', 'evidence'), ('policy', 'policy')]:
         store.put('document', key, {'content_sha256': digest(key), 'status': 'processed',
-            'purpose': purpose, 'filename': key + '.txt', 'text': 'Test-only evidence', 'parent_ids': []})
+            'purpose': purpose, 'filename': key + '.txt', 'text': ('x' * 25000 if truncated_policy and purpose == 'policy' else 'Test-only evidence'), 'parent_ids': []})
     store.put('knowledge', 'policy', {'active': True})
     job_id = store.ingest([{**transaction, 'document_ids': ['evidence']}], 'fixture-event', 'test')['jobs'][0]
     cloud, team = TestCloud(), TestTeam()
@@ -55,7 +56,7 @@ def test_pipeline_resumes_committed_report_after_service_failure(store, transact
     with pytest.raises(TimeoutError):
         asyncio.run(pipeline.execute(job_id))
     assert store.get('run', job_id)
-    assert store.get('decision', transaction['id'])['disposition'] == 'review'
+    assert store.get('decision', transaction['id'])['disposition'] == ('needs_evidence' if truncated_policy else 'review')
     result = asyncio.run(pipeline.execute(job_id))
     assert result['status'] == 'completed' and team.calls == 1
     assert len(cloud.objects) == 1 and len(cloud.analytics) == 1

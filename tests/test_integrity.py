@@ -98,9 +98,13 @@ def test_action_is_bound_to_decision_version_and_receipt(store, transaction):
         store.receipt(body, 'connector')
     store.put('action_request', request['id'], {**request, 'status': 'published'})
     receipt = store.receipt(body, 'connector')
+    assert not store.action_check(request['id'])['authorized']
     assert store.receipt(body, 'connector')['version'] == receipt['version']
     with pytest.raises(Conflict):
         store.receipt({**body, 'status': 'failed'}, 'connector')
+    prior = store.save_decision(transaction['id'], prior, refs, publish=True, expected_decision=prior['version'])
+    request = store.list('action_request')[0]
+    assert store.action_check(request['id'])['authorized']
     store.save_decision(transaction['id'], {**prior, 'disposition': 'ready'}, refs, expected_decision=prior['version'])
     assert not store.action_check(request['id'])['authorized']
     with pytest.raises(Conflict):

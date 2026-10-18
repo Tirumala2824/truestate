@@ -140,7 +140,7 @@ class Store:
                 raise KeyError('Unknown action request')
             current_hash, _, policy = self._bound_state(s, req['transaction_id'])
             decision = self._data(self._row(s, 'decision', req['transaction_id']))
-            authorized = bool(decision and policy.external_actions == 'publish_requests' and
+            authorized = bool(decision and not self._row(s, 'receipt', request_id) and policy.external_actions == 'publish_requests' and
                 req['status'] in {'queued', 'published'} and decision['version'] == req['decision_version'] and
                 decision_current(decision, current_hash) and current_hash == req['snapshot_hash'] and
                 decision['disposition'] == req['disposition'] and decision['disposition'] in {'ready', 'hold'})
