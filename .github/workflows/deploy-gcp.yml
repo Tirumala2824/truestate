@@ -1,4 +1,5 @@
 name: Deploy GCP
+run-name: ${{ inputs.diagnostic_build_id != '' && 'Cloud Build diagnostics (no deployment)' || 'Deploy GCP' }}
 on:
   workflow_dispatch:
     inputs:

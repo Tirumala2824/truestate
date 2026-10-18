@@ -12,7 +12,7 @@ command -v terraform >/dev/null
 gcloud auth print-access-token >/dev/null
 describe_build() {
   gcloud builds describe "$1" --project "$PROJECT_ID" --region "$REGION" \
-    --format='json(id,status,statusDetail,failureInfo,warnings,timing)'
+    --format='json(id,status,statusDetail,failureInfo,warnings,timing,createTime,startTime,finishTime,serviceAccount,logsBucket,options.logging,options.pool)'
 }
 if [[ -n "${DIAGNOSTIC_BUILD_ID:-}" ]]; then
   if [[ ! "$DIAGNOSTIC_BUILD_ID" =~ ^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$ ]]; then
@@ -21,6 +21,23 @@ if [[ -n "${DIAGNOSTIC_BUILD_ID:-}" ]]; then
   fi
   describe_build "$DIAGNOSTIC_BUILD_ID"
   gcloud builds log "$DIAGNOSTIC_BUILD_ID" --project "$PROJECT_ID" --region "$REGION" || true
+  project_number="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+  printf '%s\n' 'Cloud Build service-agent project roles:'
+  gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
+    --filter="bindings.members=serviceAccount:service-${project_number}@gcp-sa-cloudbuild.iam.gserviceaccount.com" \
+    --format='table(bindings.role)'
+  printf '%s\n' 'Dedicated build account project roles:'
+  gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
+    --filter="bindings.members=serviceAccount:truestate-build@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --format='table(bindings.role)'
+  printf '%s\n' 'Logs for the selected build:'
+  gcloud logging read "resource.type=\"build\" AND resource.labels.build_id=\"${DIAGNOSTIC_BUILD_ID}\"" \
+    --project "$PROJECT_ID" --freshness=24h --limit=30 --order=asc \
+    --format='json(timestamp,severity,textPayload,jsonPayload.message,protoPayload.status)' || true
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    printf '## Diagnostic check completed\n\n**This run did not deploy an application.**\n\nInspected Cloud Build `%s`. See the job logs for its status and diagnostics.\n' \
+      "$DIAGNOSTIC_BUILD_ID" >> "$GITHUB_STEP_SUMMARY"
+  fi
   exit 0
 fi
 release_tmp="$(mktemp -d)"
