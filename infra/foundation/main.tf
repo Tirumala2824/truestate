@@ -178,6 +178,16 @@ resource "google_storage_bucket_iam_member" "build" {
 
 }
 
+resource "google_storage_bucket_iam_member" "build_metadata" {
+
+  # Cloud Build validates the source/log bucket with storage.buckets.get.
+  # Object Admin grants object access, but does not grant bucket metadata access.
+  bucket = google_storage_bucket.build.name
+  role   = "roles/storage.legacyBucketReader"
+  member = "serviceAccount:${google_service_account.build.email}"
+
+}
+
 resource "google_artifact_registry_repository" "images" {
 
   location      = var.region
